@@ -95,7 +95,11 @@ h1,h2{font-family:Fredoka,sans-serif;line-height:1.05;margin:0;text-wrap:balance
 #word{text-align:center;font-family:Fredoka,sans-serif}
 #word .lab{font-size:13px;color:var(--muted);font-family:Nunito,sans-serif;font-weight:800}
 #word .ltr{font-size:clamp(22px,3vw,32px);font-weight:700;letter-spacing:.18em;line-height:1.2;overflow-wrap:normal}
-#word .wg{white-space:nowrap;display:inline-block}
+#word .wg{white-space:nowrap;display:inline-flex;gap:.16em;align-items:flex-end}
+#word .slots{display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-end;column-gap:.85em;row-gap:6px;letter-spacing:0}
+#word .ch{display:inline-block;min-width:.78em;text-align:center;border-bottom:.12em solid currentColor;line-height:1.05;min-height:1.1em;padding:0 1px}
+#word .sym{display:inline-block;min-width:.4em;text-align:center}
+#word .slots .cnt{align-self:center;margin-left:-.4em}
 .rmob{display:none}
 #word .ltr.plain{letter-spacing:0}
 #word .cnt{font-size:14px;color:var(--muted);margin-left:6px;letter-spacing:0;white-space:nowrap}
@@ -203,7 +207,7 @@ h1,h2{font-family:Fredoka,sans-serif;line-height:1.05;margin:0;text-wrap:balance
  #roundlab button{min-width:40px;min-height:40px;padding:0 8px;justify-content:center}
  .bl{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
  #clock{min-width:0;font-size:20px;gap:4px}#clock svg{width:26px;height:26px}
- #word .ltr{font-size:20px;letter-spacing:.09em}#word .lab{font-size:12px;line-height:1.25}#word .cnt{font-size:12px}
+ #word .ltr{font-size:20px;letter-spacing:.09em}#word .ch{min-width:.72em}#word .slots{column-gap:.7em}#word .lab{font-size:12px;line-height:1.25}#word .cnt{font-size:12px}
  #reacts{flex-wrap:nowrap;gap:4px;padding:4px}#reacts button{flex:1 1 0;min-width:0;font-size:20px;min-height:40px;padding:0}
  #ov{padding:8px}#ov .card{padding:14px}#ov h2{font-size:20px}
  .res.many{grid-template-columns:1fr 1fr;gap:4px}.res.many li{font-size:13px;padding:4px 8px}

@@ -498,7 +498,10 @@ function wordHtml() {
   const lab = S.ph === 'reveal' ? 'The word was' : S.dr === id ? 'Draw this' : S.g[id] ? 'You got it' : 'Guess this';
   const groups = [[]]; gs.forEach(g => { if (g === ' ') groups.push([]); else groups[groups.length - 1].push(g); });
   const rt = S.ph === 'draw' ? `<span class="rmob">Round ${Math.min(S.round, S.set.rounds)}/${S.set.rounds} · </span>` : '';
-  return `<div class="lab">${rt}${lab}</div><div class="ltr">${groups.map(gr => `<span class="wg">${gr.map(esc).join('')}</span>`).join(' ')}<span class="cnt">${groups.map(gr => gr.length).join(' ')}</span></div>`;
+  // One underlined slot per letter, a clear gap between words, and the letter count of each word.
+  const slot = g => isLetter(g) || g === '_' ? `<span class="ch">${g === '_' ? '' : esc(g)}</span>` : `<span class="sym">${esc(g)}</span>`;
+  const sr = groups.map(gr => gr.length).join(' + ') + ' letters';
+  return `<div class="lab">${rt}${lab}</div><div class="ltr slots" aria-label="${sr}">${groups.map(gr => `<span class="wg">${gr.map(slot).join('')}</span>`).join('')}<span class="cnt">${groups.map(gr => gr.length).join(' ')}</span></div>`;
 }
 function plist() {
   const on = onlineIds(), id = me(), host = S.host === id;
