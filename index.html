@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Scribe-It</title>
+<meta name="description" content="Draw, guess and laugh with friends. A free multiplayer drawing game.">
+<meta name="theme-color" content="#2347c6">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<meta property="og:title" content="Scribe-It"><meta property="og:description" content="Join my room and let's draw and guess!"><meta property="og:image" content="/icons/icon-512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:light dark;--blue:#2347c6;--deep:#152f93;--card:#fff;--ink:#1b1f3b;--muted:#5d6386;--line:#e2e5f3;--sun:#ffd23f;--pink:#ff4f7b;--mint:#2fbf7f;--soft:#f3f5ff}
+@media(prefers-color-scheme:dark){:root{--blue:#14287a;--deep:#0b1850;--card:#1b2046;--ink:#eef0ff;--muted:#a9aed6;--line:#323a6c;--soft:#242b5a}}
+*{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
+body{margin:0;min-height:100vh;color:var(--ink);font:16px/1.5 Nunito,system-ui,sans-serif;overflow-x:clip;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);background:var(--blue) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' fill='none' stroke='%23fff' stroke-opacity='.09' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M20 30q10-14 20 0t20 0'/%3E%3Ccircle cx='130' cy='40' r='12'/%3E%3Cpath d='M40 120l10 18 10-18 10 18'/%3E%3Cpath d='M130 110l6 12 13 2-10 9 3 13-12-7-12 7 3-13-10-9 13-2z'/%3E%3Cpath d='M90 165q8-10 16 0'/%3E%3C/svg%3E")}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;border-radius:12px;min-height:44px;padding:0 16px;font-weight:800}
+button:disabled{cursor:default;opacity:.6}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
+input,select,textarea{min-height:44px;border:2px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--soft);font-size:16px;width:100%}
+.big{background:var(--sun);color:#1b1f3b;font-family:Fredoka,sans-serif;font-size:20px;min-height:52px;box-shadow:0 4px 0 #c99a00;width:100%}
+.big:active{transform:translateY(3px);box-shadow:0 1px 0 #c99a00}
+.ghost{background:var(--soft);color:var(--ink)}
+.muted{color:var(--muted)}.small{font-size:14px}
+h1,h2{font-family:Fredoka,sans-serif;line-height:1.05;margin:0;text-wrap:balance}
+#home{max-width:1100px;margin:auto;padding:clamp(24px,5vw,56px) max(4vw,14px);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:clamp(20px,4vw,48px);align-items:center}
+.logo{font-size:clamp(46px,8vw,84px);font-weight:700;color:#fff;text-shadow:0 5px 0 var(--deep)}
+.logo span{display:inline-block}.logo span:nth-child(odd){transform:rotate(-5deg)}.logo span:nth-child(even){transform:rotate(4deg)}
+.tag{color:#e4e9ff;font-size:18px;margin:14px 0 22px;max-width:30em}
+.card{background:var(--card);border-radius:20px;padding:20px;box-shadow:0 8px 0 rgba(0,0,0,.18)}
+.form{display:grid;gap:12px}.form label{font-weight:800;font-size:14px;display:grid;gap:6px}
+.swatches{display:flex;flex-wrap:wrap;gap:8px}
+.sw{width:44px;height:44px;padding:0;border-radius:50%;border:3px solid transparent;background:none}
+.sw[aria-pressed=true]{border-color:var(--ink)}.sw svg{width:100%;height:100%}
+.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:18px;color:#fff;font-size:15px}
+.steps b{display:block;font-family:Fredoka,sans-serif;font-size:22px;color:var(--sun)}
+.hero svg{width:100%;height:auto;display:block;filter:drop-shadow(0 12px 0 rgba(0,0,0,.18))}
+#notice,#demo{background:var(--sun);color:#1b1f3b;border-radius:12px;padding:10px 14px;font-weight:700;font-size:14px}
+#demo{background:#dbe4ff}
+#join-hint{font-size:14px;color:var(--muted);font-weight:700;margin:-4px 0 0}
+#game{display:none;max-width:1240px;margin:auto;padding:12px max(2vw,10px) 24px;grid-template-columns:220px minmax(0,1fr) 270px;grid-template-areas:"top top top" "pl board chat";gap:10px}
+#top{grid-area:top;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;background:var(--card);border-radius:16px;padding:8px 14px}
+#clock{display:flex;align-items:center;gap:8px;font-family:Fredoka,sans-serif;font-size:24px;font-weight:700;min-width:92px}
+#clock svg{width:36px;height:36px}#clock.hurry{color:var(--pink)}
+#word{text-align:center;font-family:Fredoka,sans-serif}
+#word .lab{font-size:13px;color:var(--muted);font-family:Nunito,sans-serif;font-weight:800}
+#word .ltr{font-size:clamp(22px,3vw,32px);font-weight:700;letter-spacing:.18em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#word .ltr.plain{letter-spacing:0}
+#word .cnt{font-size:14px;color:var(--muted);margin-left:6px;letter-spacing:0}
+.code{background:var(--sun);color:#1b1f3b;border-radius:10px;padding:2px 10px;letter-spacing:.06em}
+#roundlab{font-weight:800;text-align:end;font-size:15px;display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+#roundlab button{min-height:36px;font-size:13px}
+#mute[aria-pressed=false]{opacity:.7}
+#pl{grid-area:pl;background:var(--card);border-radius:16px;padding:8px;align-self:start}
+#pl ol{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+#pl li{display:grid;grid-template-columns:28px 40px minmax(0,1fr) auto;align-items:center;gap:6px;padding:6px;border-radius:12px}
+#pl li.got{background:#d8f8e8;color:#123}#pl li.away{opacity:.55}
+#pl .rk{font-weight:800;color:var(--muted);font-size:14px;text-align:center}
+#pl .nm{font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;max-width:100%;vertical-align:bottom}
+#pl .sub{font-size:13px;color:var(--muted);font-weight:700}#pl li.got .sub{color:#2a6}
+.kick{display:block;min-height:28px;padding:0 8px;margin-top:2px;font-size:12px;border-radius:8px;background:var(--soft);color:var(--muted)}
+.kick[aria-pressed=true]{background:var(--pink);color:#fff}
+.av{width:40px;height:40px;display:block}.pen{width:24px;height:24px}
+#board{grid-area:board;display:grid;gap:10px;align-content:start}
+#wrap{position:relative;aspect-ratio:4/3;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 0 rgba(0,0,0,.18)}
+#cv{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}#cv.on{cursor:crosshair}
+#ov{position:absolute;inset:0;display:none;place-items:center;padding:14px;background:rgba(20,30,90,.72);overflow:auto}
+#ov.show{display:grid}
+#wrap.tall{aspect-ratio:auto;min-height:420px}#wrap.tall #ov{position:relative;inset:auto;min-height:420px}
+#ov .card{width:min(500px,100%);text-align:center}
+#ov h2{font-size:clamp(22px,3.5vw,32px);margin-bottom:10px}
+.share{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:6px;margin:6px 0}
+.share input{font-size:14px;min-height:40px}.share button,.share a{min-height:40px;font-size:14px}
+.wa{display:inline-grid;place-items:center;background:#25d366;color:#fff;border-radius:12px;padding:0 12px;font-weight:800;text-decoration:none}
+.choices{display:grid;gap:10px;margin-top:12px}
+.choices button{background:var(--soft);font-family:Fredoka,sans-serif;font-size:22px;min-height:56px}
+.choices button:hover{background:var(--sun);color:#1b1f3b}
+.set{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;text-align:start;margin:10px 0}
+.set label,.lbl{font-weight:800;font-size:13px;display:grid;gap:4px;text-align:start}
+.set select{min-height:40px;padding:4px 8px}
+.packs{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:6px 0 10px}
+.chip{min-height:36px;border-radius:999px;padding:0 12px;font-size:14px;background:var(--soft);border:2px solid var(--line)}
+.chip[aria-pressed=true]{background:var(--sun);border-color:var(--sun);color:#1b1f3b}
+.chk{display:flex;gap:8px;align-items:center;font-weight:700;font-size:14px;margin:8px 0 12px;text-align:start}
+.chk input{width:22px;height:22px;min-height:0}
+.res{list-style:none;padding:0;margin:12px 0 0;display:grid;gap:6px;text-align:start}
+.res li{display:flex;justify-content:space-between;gap:10px;font-weight:800;padding:6px 10px;border-radius:10px;background:var(--soft)}
+.res .plus{color:var(--mint)}
+.rate{display:flex;gap:8px;justify-content:center;margin-top:10px}
+.rate button{display:flex;gap:6px;align-items:center;background:var(--soft);min-height:40px}
+.rate button[aria-pressed=true]{background:var(--sun);color:#1b1f3b}
+.podium{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:end;gap:8px;margin-top:14px}
+.podium div{display:grid;justify-items:center;gap:4px;font-weight:800}
+.podium .bar{width:100%;border-radius:10px 10px 0 0;background:var(--sun);color:#1b1f3b;font-family:Fredoka,sans-serif;font-size:26px;display:grid;place-items:center}
+#tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--card);border-radius:16px;padding:8px}
+#tools .pal{display:grid;grid-template-columns:repeat(8,30px);gap:4px}
+#tools .pal button{width:30px;height:30px;min-height:0;padding:0;border-radius:8px;border:2px solid rgba(0,0,0,.15)}
+#tools .pal button[aria-pressed=true]{outline:3px solid var(--ink);outline-offset:1px}
+.tb{display:flex;gap:4px}.tb button{min-width:44px;padding:0 10px;background:var(--soft);font-size:14px}
+.tb button[aria-pressed=true]{background:var(--sun);color:#1b1f3b}
+.dot{display:inline-block;border-radius:50%;background:currentColor;vertical-align:middle}
+#hintbar{background:var(--card);border-radius:16px;padding:10px 16px;font-weight:800;color:var(--muted);display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;text-align:center}
+#hintbar .rate{margin:0}
+#chat{grid-area:chat;background:var(--card);border-radius:16px;display:flex;flex-direction:column;min-height:0;max-height:calc(100vh - 110px)}
+#log{flex:1;overflow-y:auto;padding:8px;min-height:220px;font-size:15px}
+#log p{margin:0;padding:4px 8px;border-radius:8px;overflow-wrap:anywhere}
+#log p:nth-child(even){background:var(--soft)}
+#log b{margin-right:4px}
+#log .good{color:#1d9a5f;font-weight:800}#log .bad{color:var(--pink);font-weight:800}#log .info{color:#3a63e0;font-weight:800}
+#log .close{color:#d98a00;font-weight:800}#log .priv{color:#1d9a5f}
+#chat form{padding:8px;border-top:2px solid var(--line)}
+@media(max-width:900px){#game{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"top top" "board board" "pl chat"}#chat{height:340px;max-height:none}#top{grid-template-columns:auto minmax(0,1fr)}#roundlab{grid-column:1/-1;justify-content:center}}
+@media(max-width:700px){#home{grid-template-columns:minmax(0,1fr)}.hero{order:-1;max-width:420px}.steps{grid-template-columns:minmax(0,1fr)}.set{grid-template-columns:1fr 1fr}.share{grid-template-columns:1fr 1fr}.share input{grid-column:1/-1}}
+@media(max-width:520px){#game{grid-template-areas:"top top" "board board" "chat chat" "pl pl"}#tools .pal{grid-template-columns:repeat(8,26px)}#tools .pal button{width:26px;height:26px}}
+@media(prefers-reduced-motion:no-preference){.pop{animation:pop .35s ease-out}@keyframes pop{from{transform:scale(.85);opacity:0}}}
+</style></head><body>
+
+<main id="home">
+  <section>
+    <h1 class="logo" aria-label="Scribe-It"><span>S</span><span>c</span><span>r</span><span>i</span><span>b</span><span>e</span><span>-</span><span>I</span><span>t</span></h1>
+    <p class="tag">Draw a secret word while your friends race to guess it. Share the link, play together, live.</p>
+    <div class="card form">
+      <div id="demo" hidden>Demo mode: Firebase isn't set up yet, so other players are just other tabs in this browser.</div>
+      <div id="notice" hidden></div>
+      <label>Your name<input id="nick" maxlength="16" placeholder="Type a nickname" autocomplete="off"></label>
+      <div><b class="small">Your doodle</b><div class="swatches" id="sws"></div></div>
+      <label>Room code<input id="code" maxlength="12" placeholder="Leave blank to create a new room" autocomplete="off"></label>
+      <p id="join-hint"></p>
+      <button class="big" id="join" disabled>Connecting…</button>
+    </div>
+    <div class="steps"><div><b>1</b>One player draws a secret word.</div><div><b>2</b>Everyone else guesses in the chat.</div><div><b>3</b>Faster guesses score more points.</div></div>
+  </section>
+  <section class="hero" aria-hidden="true">
+    <svg viewBox="0 0 520 420"><rect x="30" y="30" width="460" height="350" rx="22" fill="#fff" transform="rotate(-3 260 205)"/>
+      <g transform="rotate(-3 260 205)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="190" y="38" width="140" height="26" rx="4" fill="#ffd23f" opacity=".85"/>
+        <circle cx="390" cy="120" r="34" stroke="#ffb400" stroke-width="10"/>
+        <path d="M390 66v-14M390 188v-14M336 120h-14M458 120h-14M352 82l-10-10M438 168l-10-10M428 82l10-10M342 168l10-10" stroke="#ffb400" stroke-width="8"/>
+        <path d="M110 300V210l80-62 80 62v90z" stroke="#2347c6" stroke-width="10" fill="#dbe4ff"/>
+        <path d="M168 300v-50h44v50" stroke="#ff4f7b" stroke-width="10"/>
+        <path d="M70 320q60-14 120 0t120 0 140 0" stroke="#2fbf7f" stroke-width="12"/>
+        <path d="M300 300c0-40 20-60 40-60s30 30 30 60" stroke="#8d5524" stroke-width="10"/><circle cx="345" cy="220" r="40" fill="#2fbf7f" stroke="#1d9a5f" stroke-width="8"/>
+      </g>
+      <g transform="translate(400 250) rotate(38)"><rect x="0" y="-14" width="120" height="28" rx="6" fill="#ffd23f"/><rect x="96" y="-14" width="24" height="28" fill="#ff4f7b"/><path d="M0-14L-30 0 0 14z" fill="#f5c19a"/><path d="M-20-5L-30 0-20 5z" fill="#1b1f3b"/></g>
+    </svg>
+  </section>
+</main>
+
+<main id="game">
+  <header id="top">
+    <div id="clock"><svg viewBox="0 0 40 40"><circle cx="20" cy="22" r="15" fill="#fff" stroke="#1b1f3b" stroke-width="3"/><path d="M20 22V13M20 22l6 4" stroke="#1b1f3b" stroke-width="3" stroke-linecap="round"/><rect x="16" y="2" width="8" height="5" rx="2" fill="#1b1f3b"/></svg><span id="secs">–</span></div>
+    <div id="word"></div>
+    <div id="roundlab"><span id="rnd"></span><button class="ghost" id="mute" aria-pressed="true">Sound on</button><button class="ghost" id="leave">Leave</button></div>
+  </header>
+  <aside id="pl"><ol id="plist"></ol></aside>
+  <section id="board">
+    <div id="wrap"><canvas id="cv" width="800" height="600" aria-label="Drawing board"></canvas><div id="ov"></div></div>
+    <div id="tools" hidden>
+      <div class="pal" id="pal"></div>
+      <div class="tb" id="sizes"></div>
+      <div class="tb"><button data-t="brush" aria-pressed="true">Brush</button><button data-t="fill" aria-pressed="false">Fill</button><button data-t="erase" aria-pressed="false">Eraser</button></div>
+      <div class="tb"><button id="undo">Undo</button><button id="clr">Clear</button></div>
+    </div>
+    <div id="hintbar"></div>
+  </section>
+  <aside id="chat"><div id="log" aria-live="polite"></div><form id="cf"><input id="msg" maxlength="120" autocomplete="off" placeholder="Type your guess here…" aria-label="Chat or guess"></form></aside>
+</main>
+<script type="module" src="/js/app.js"></script>
+</body></html>
