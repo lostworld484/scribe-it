@@ -110,10 +110,26 @@ h1,h2{font-family:Fredoka,sans-serif;line-height:1.05;margin:0;text-wrap:balance
 #log b{margin-right:4px}
 #log .good{color:#1d9a5f;font-weight:800}#log .bad{color:var(--pink);font-weight:800}#log .info{color:#3a63e0;font-weight:800}
 #log .close{color:#d98a00;font-weight:800}#log .priv{color:#1d9a5f}
-#chat form{padding:8px;border-top:2px solid var(--line)}
+#chat form{padding:8px;border-top:2px solid var(--line);display:flex;gap:8px}
+#msg{border-color:#9fb1ee;background:var(--card)}#msg:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 3px rgba(35,71,198,.25)}
+#send{background:var(--blue);color:#fff;min-width:76px;flex:none}#send:active{transform:translateY(2px)}
+#log .close-all{color:#d98a00;font-weight:800}
+#pl li:nth-child(1) .rk{color:#d9a400}#pl li:nth-child(2) .rk{color:#8a94a6}#pl li:nth-child(3) .rk{color:#b8733b}
+#pl li:nth-child(-n+3) .rk{font-size:16px;font-weight:900}
 @media(max-width:900px){#game{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"top top" "board board" "pl chat"}#chat{height:340px;max-height:none}#top{grid-template-columns:auto minmax(0,1fr)}#roundlab{grid-column:1/-1;justify-content:center}}
 @media(max-width:700px){#home{grid-template-columns:minmax(0,1fr)}.hero{order:-1;max-width:420px}.steps{grid-template-columns:minmax(0,1fr)}.set{grid-template-columns:1fr 1fr}.share{grid-template-columns:1fr 1fr}.share input{grid-column:1/-1}}
-@media(max-width:520px){#game{grid-template-areas:"top top" "board board" "chat chat" "pl pl"}#tools .pal{grid-template-columns:repeat(8,26px)}#tools .pal button{width:26px;height:26px}}
+@media(max-width:700px){
+ #game{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);grid-template-areas:"top top" "board board" "pl chat";gap:8px;padding-bottom:calc(86px + env(safe-area-inset-bottom))}
+ #chat{height:300px;max-height:none}#log{min-height:0}
+ #pl{max-height:300px;overflow-y:auto;align-self:stretch;padding:6px}
+ #pl li{grid-template-columns:20px 28px minmax(0,1fr) auto;gap:4px;padding:4px}
+ #pl .av{width:28px;height:28px}#pl .nm{font-size:14px}#pl .sub{font-size:12px}.kick{font-size:11px;min-height:24px;padding:0 6px}#pl .pen{width:20px;height:20px}
+ #chat form{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--card);border-top:3px solid var(--sun);padding:10px max(10px,env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));box-shadow:0 -6px 20px rgba(0,0,0,.25)}
+ #msg{min-height:52px;font-size:17px}#send{min-height:52px;font-size:16px}
+ #hintbar{padding:6px 10px;font-size:13px;gap:6px}#hintbar .rate button{min-height:34px;padding:0 10px}
+ #roundlab button{min-height:32px;padding:0 10px}#top{gap:4px 10px}#board{gap:8px}
+}
+@media(max-width:520px){#tools .pal{grid-template-columns:repeat(8,26px)}#tools .pal button{width:26px;height:26px}#top{padding:6px 10px}#clock{font-size:20px;min-width:70px}#clock svg{width:28px;height:28px}}
 @media(prefers-reduced-motion:no-preference){.pop{animation:pop .35s ease-out}@keyframes pop{from{transform:scale(.85);opacity:0}}}
 </style></head><body>
 
@@ -165,7 +181,7 @@ h1,h2{font-family:Fredoka,sans-serif;line-height:1.05;margin:0;text-wrap:balance
     </div>
     <div id="hintbar"></div>
   </section>
-  <aside id="chat"><div id="log" aria-live="polite"></div><form id="cf"><input id="msg" maxlength="120" autocomplete="off" placeholder="Type your guess here…" aria-label="Chat or guess"></form></aside>
+  <aside id="chat"><div id="log" aria-live="polite"></div><form id="cf"><input id="msg" maxlength="120" autocomplete="off" enterkeyhint="send" placeholder="Type your guess here…" aria-label="Chat or guess"><button type="submit" id="send">Send</button></form></aside>
 </main>
 <script type="module" src="/js/app.js"></script>
 </body></html>

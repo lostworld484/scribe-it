@@ -17,7 +17,7 @@ const normG = s => String(s).normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCa
 const SEG = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
 const graph = s => SEG ? [...SEG.segment(s)].map(x => x.segment) : Array.from(s);
 const isLetter = g => /[\p{L}\p{N}]/u.test(g);
-function lev(a, b) { a = [...a]; b = [...b]; if (Math.abs(a.length - b.length) > 1) return 9; const d = [...Array(b.length + 1).keys()]; for (let i = 1; i <= a.length; i++) { let p = d[0]; d[0] = i; for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, p + (a[i - 1] === b[j - 1] ? 0 : 1)); p = t; } } return d[b.length]; }
+function lev(a, b) { a = [...a]; b = [...b]; if (Math.abs(a.length - b.length) > 2) return 9; const d = [...Array(b.length + 1).keys()]; for (let i = 1; i <= a.length; i++) { let p = d[0]; d[0] = i; for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, p + (a[i - 1] === b[j - 1] ? 0 : 1)); p = t; } } return d[b.length]; }
 async function sha(s) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('').slice(0, 24); }
 const guessHash = (w, tid) => sha(normG(w) + '|' + tid + '|' + code);
 const mask = (w, rev) => graph(w).map((g, i) => g === ' ' ? ' ' : (!isLetter(g) || rev.includes(i)) ? g : '_');
@@ -337,14 +337,19 @@ function onChat(m) {
     if (m.sys === 'g') { addMsg(nameOf(m.p) + ' guessed the word!', 'good'); if (fresh) sfx(m.p === me() ? 'ok' : 'pop'); }
     else if (m.sys === 'l') addMsg(nameOf(m.p) + ' was away too long and left the game', 'bad');
     else if (m.sys === 'k') addMsg(nameOf(m.p) + ' was removed from the room', 'bad');
-    else if (m.sys === 'close' && m.to === me()) { addMsg('“' + String(m.txt || '').slice(0, 120) + '” is close!', 'close'); if (fresh) sfx('close'); }
+    else if (m.sys === 'close') {
+      const who = m.p || m.to;
+      if (who === me()) { addMsg('“' + String(m.txt || '').slice(0, 120) + '” is very close!', 'close'); if (fresh) sfx('close'); }
+      else addMsg(nameOf(who) + ' is very close!', 'close-all');
+    }
     return;
   }
   const t = String(m.txt || '').slice(0, 120); if (!t) return;
   if (m.priv) { if (m.u === me() || me() === S.dr || S.g[me()]) addMsg(t, 'priv', m.u); }
   else addMsg(t, '', m.u);
   if (fresh && !m.priv && S.host === me() && S.ph === 'draw' && m.u !== S.dr && !S.g[m.u]) {
-    const w = hostWord(S); if (w && lev(normG(t), normG(w)) === 1) sys('close', null, { to: m.u, txt: t });
+    const w = hostWord(S);
+    if (w) { const a = normG(t), b = normG(w), d = lev(a, b), lim = [...b].length >= 5 ? 2 : 1; if (d > 0 && d <= lim) sys('close', m.u, { to: m.u, txt: t }); }
   }
 }
 $('#cf').addEventListener('submit', async e => {
@@ -387,8 +392,8 @@ function plist() {
   const need = Math.max(2, Math.floor((on.length - 1) / 2) + 1);
   $('#plist').innerHTML = rows.map((r, i) => {
     const away = !on.includes(r.p), got = S.ph === 'draw' && S.g[r.p], votes = Object.keys(KICK[r.p] || {}).length, mine = KICK[r.p] && KICK[r.p][id];
-    const kb = r.p === id ? '' : host ? `<button class="kick" data-kick="${r.p}" aria-label="Remove ${esc(nameOf(r.p))}">Remove</button>`
-      : `<button class="kick" data-vote="${r.p}" aria-pressed="${!!mine}" aria-label="Vote to remove ${esc(nameOf(r.p))}">Vote out${votes ? ' ' + votes + '/' + need : ''}</button>`;
+    const kb = r.p === id ? '' : host ? `<button class="kick" data-kick="${r.p}" aria-label="Remove ${esc(nameOf(r.p))}">Kick</button>`
+      : `<button class="kick" data-vote="${r.p}" aria-pressed="${!!mine}" aria-label="Vote to remove ${esc(nameOf(r.p))}">Vote kick${votes ? ' ' + votes + '/' + need : ''}</button>`;
     return `<li class="${got ? 'got' : ''} ${away ? 'away' : ''}"><span class="rk">#${i + 1}</span>${av(colOf(r.p))}<span><span class="nm">${esc(nameOf(r.p))}${r.p === id ? ' (you)' : ''}</span><br><span class="sub">${S.ph === 'lobby' ? (S.host === r.p ? 'host' : 'ready') : r.s + ' pts'}</span> <span class="sub" data-aw="${r.p}"></span>${kb}</span>${S.dr === r.p && S.ph !== 'lobby' ? PEN : ''}</li>`;
   }).join('');
 }
