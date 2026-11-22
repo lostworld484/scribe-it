@@ -62,6 +62,7 @@ const SFX = {
   close: () => tone(440, .12, 0, 'sawtooth', .05)
 };
 const VIB = { ok: [60], turn: [90, 60, 90, 60, 90], close: [25], win: [120, 60, 120, 60, 220], end: [40] };
+document.addEventListener('pointerdown', () => { if (AC && AC.state !== 'running') AC.resume().catch(() => {}); }, { passive: true });
 const sfx = n => {
   try { SFX[n] && SFX[n](); } catch (e) {}
   try { if (!muted && VIB[n] && navigator.vibrate) navigator.vibrate(VIB[n]); } catch (e) {}
@@ -75,7 +76,8 @@ async function keepAwake() {
 }
 function releaseAwake() { try { if (wake) wake.release(); } catch (e) {} wake = null; }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { keepAwake(); stopFlash(); } });
-function drawMute() { $('#mute').innerHTML = muted ? 'Sound off' : 'Sound on'; $('#mute').setAttribute('aria-pressed', !muted); }
+const SPK = on => `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>${on ? '<path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>' : '<path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'}</svg>`;
+function drawMute() { $('#mute').innerHTML = SPK(!muted) + `<span class="bl">${muted ? 'Sound off' : 'Sound on'}</span>`; $('#mute').setAttribute('aria-pressed', !muted); $('#mute').setAttribute('aria-label', muted ? 'Sound off' : 'Sound on'); }
 $('#mute').addEventListener('click', () => { muted = !muted; lset('dd-mute', muted ? '1' : '0'); drawMute(); initAudio(); });
 drawMute();
 
@@ -322,21 +324,48 @@ async function nextTurn(X, now) {
 /* ---------- drawing ---------- */
 const cv = $('#cv'), cx = cv.getContext('2d', { willReadFrequently: true });
 const clearCv = () => { cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H); }; clearCv();
+// Snapshots taken after each fill, so undo/replay can start from there instead of repainting every fill.
+let cps = [];
+function checkpoint(st) {
+  try { const n = strokes.indexOf(st) + 1; if (!n) return; cps = cps.filter(c => c.id !== st.id && c.n < n); cps.push({ n, id: st.id, img: cx.getImageData(0, 0, W, H) }); if (cps.length > 3) cps.shift(); } catch (e) {}
+}
 function seg(st, from) {
-  if (st.f) return fill(st.p[0], st.p[1], st.c);
+  if (st.f) { fill(st.p[0], st.p[1], st.c); checkpoint(st); return; }
   const p = st.p; cx.strokeStyle = cx.fillStyle = st.c; cx.lineWidth = st.w; cx.lineCap = 'round'; cx.lineJoin = 'round';
   if (p.length < 4) { cx.beginPath(); cx.arc(p[0], p[1], st.w / 2, 0, 7); cx.fill(); return; }
   const s = Math.max(0, from - 2); cx.beginPath(); cx.moveTo(p[s], p[s + 1]); for (let i = s + 2; i < p.length; i += 2) cx.lineTo(p[i], p[i + 1]); cx.stroke();
 }
-const redraw = () => { clearCv(); strokes.forEach(s => seg(s, 0)); };
+function redraw() {
+  if (!strokes.length) cps = [];
+  let start = 0;
+  for (let c = cps.length - 1; c >= 0; c--) { const cp = cps[c]; if (cp.n <= strokes.length && strokes[cp.n - 1] && strokes[cp.n - 1].id === cp.id) { cx.putImageData(cp.img, 0, 0); start = cp.n; break; } }
+  cps = cps.filter(c => c.n <= start);
+  if (!start) clearCv();
+  for (let i = start; i < strokes.length; i++) seg(strokes[i], 0);
+}
 function fill(x, y, hex) {
+  // Scanline flood fill on a 32-bit view: several times faster than pixel-by-pixel.
   x = x | 0; y = y | 0; if (x < 0 || y < 0 || x >= W || y >= H) return;
-  const im = cx.getImageData(0, 0, W, H), d = im.data, k0 = (y * W + x) * 4, tr = d[k0], tg = d[k0 + 1], tb = d[k0 + 2];
+  const im = cx.getImageData(0, 0, W, H), d = im.data, d32 = new Uint32Array(d.buffer);
+  const k0 = (y * W + x) * 4, tr = d[k0], tg = d[k0 + 1], tb = d[k0 + 2];
   const n = parseInt(hex.slice(1), 16), r = n >> 16, g = n >> 8 & 255, b = n & 255;
   if (Math.abs(tr - r) + Math.abs(tg - g) + Math.abs(tb - b) < 12) return;
-  const seen = new Uint8Array(W * H), st = [y * W + x]; seen[y * W + x] = 1;
-  const tryP = q => { if (seen[q]) return; const k = q * 4; if (Math.abs(d[k] - tr) + Math.abs(d[k + 1] - tg) + Math.abs(d[k + 2] - tb) < 110) { seen[q] = 1; st.push(q); } };
-  while (st.length) { const j = st.pop(), k = j * 4, px = j % W; d[k] = r; d[k + 1] = g; d[k + 2] = b; d[k + 3] = 255; if (px > 0) tryP(j - 1); if (px < W - 1) tryP(j + 1); if (j >= W) tryP(j - W); if (j < W * (H - 1)) tryP(j + W); }
+  const px = ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0, N = W * H, m = new Uint8Array(N), stack = [x, y];
+  // One pass marks every pixel close to the tapped colour; the fill then only follows marks.
+  for (let i = 0, k = 0; i < N; i++, k += 4) { const dr = d[k] - tr, dg = d[k + 1] - tg, db = d[k + 2] - tb; m[i] = (dr < 0 ? -dr : dr) + (dg < 0 ? -dg : dg) + (db < 0 ? -db : db) < 110 ? 1 : 0; }
+  const ok = i => m[i] === 1;
+  while (stack.length) {
+    const yy = stack.pop(); let xx = stack.pop(), i = yy * W + xx;
+    if (!ok(i)) continue;
+    while (xx > 0 && ok(i - 1)) { xx--; i--; }
+    let up = false, down = false;
+    while (xx < W && ok(i)) {
+      m[i] = 0; d32[i] = px;
+      if (yy > 0) { if (ok(i - W)) { if (!up) { stack.push(xx, yy - 1); up = true; } } else up = false; }
+      if (yy < H - 1) { if (ok(i + W)) { if (!down) { stack.push(xx, yy + 1); down = true; } } else down = false; }
+      xx++; i++;
+    }
+  }
   cx.putImageData(im, 0, 0);
 }
 const canDraw = () => !!S && S.ph === 'draw' && S.dr === me();
@@ -362,7 +391,7 @@ function applyChunk(d) {
   if (d.f) { const st = { id: d.s, f: 1, c, p }; strokes.push(st); seg(st, 0); return; }
   let st = strokes.find(s => s.id === d.s);
   if (!st) { st = { id: d.s, c, w: Math.min(60, Math.max(1, +d.w || 4)), p }; strokes.push(st); seg(st, 0); }
-  else { const f = st.p.length; st.p.push(...p.slice(2)); seg(st, f); }
+  else { const f = st.p.length, idx = strokes.indexOf(st); cps = cps.filter(c => c.n <= idx); st.p.push(...p.slice(2)); seg(st, f); }
 }
 $('#pal').innerHTML = COLORS.map(c => `<button data-c="${c}" style="background:${c}" aria-label="Colour ${c}" aria-pressed="${c === color}"></button>`).join('');
 $('#sizes').innerHTML = SIZES.map(s => `<button data-s="${s}" aria-label="Brush size ${s}" aria-pressed="${s === size}"><span class="dot" style="width:${Math.min(22, s / 1.5 + 4)}px;height:${Math.min(22, s / 1.5 + 4)}px"></span></button>`).join('');
@@ -442,8 +471,9 @@ function wordHtml() {
   const full = S.ph === 'reveal' || (w && (S.dr === id || S.g[id]));
   const gs = full ? graph(w) : S.hint;
   const lab = S.ph === 'reveal' ? 'The word was' : S.dr === id ? 'Draw this' : S.g[id] ? 'You got it' : 'Guess this';
-  const lens = gs.join('').split(' ').map(x => graph(x).length).join(' ');
-  return `<div class="lab">${lab}</div><div class="ltr">${gs.map(g => g === ' ' ? '&nbsp;' : esc(g)).join('')}<span class="cnt">${lens}</span></div>`;
+  const groups = [[]]; gs.forEach(g => { if (g === ' ') groups.push([]); else groups[groups.length - 1].push(g); });
+  const rt = S.ph === 'draw' ? `<span class="rmob">Round ${Math.min(S.round, S.set.rounds)}/${S.set.rounds} · </span>` : '';
+  return `<div class="lab">${rt}${lab}</div><div class="ltr">${groups.map(gr => `<span class="wg">${gr.map(esc).join('')}</span>`).join(' ')}<span class="cnt">${groups.map(gr => gr.length).join(' ')}</span></div>`;
 }
 function plist() {
   const on = onlineIds(), id = me(), host = S.host === id;
@@ -454,7 +484,7 @@ function plist() {
     const away = !on.includes(r.p), got = S.ph === 'draw' && S.g[r.p], votes = Object.keys(KICK[r.p] || {}).length, mine = KICK[r.p] && KICK[r.p][id];
     const kb = r.p === id ? '' : host ? `<button class="kick" data-kick="${r.p}" aria-label="Remove ${esc(nameOf(r.p))}">Kick</button>`
       : `<button class="kick" data-vote="${r.p}" aria-pressed="${!!mine}" aria-label="Vote to remove ${esc(nameOf(r.p))}">Vote kick${votes ? ' ' + votes + '/' + need : ''}</button>`;
-    return `<li class="${got ? 'got' : ''} ${away ? 'away' : ''}"><span class="rk">#${i + 1}</span>${avOf(r.p)}<span><span class="nm">${esc(nameOf(r.p))}${r.p === id ? ' (you)' : ''}</span><br><span class="sub">${S.ph === 'lobby' ? (S.host === r.p ? 'host' : 'ready') : r.s + ' pts'}</span> <span class="sub" data-aw="${r.p}"></span>${kb}</span>${S.dr === r.p && S.ph !== 'lobby' ? PEN : ''}</li>`;
+    return `<li class="${got ? 'got' : ''} ${away ? 'away' : ''} ${r.p === id ? 'me' : ''}"><span class="rk">#${i + 1}</span>${avOf(r.p)}<span><span class="nm">${esc(nameOf(r.p))}</span><span class="sub">${r.p === id ? 'you · ' : ''}${S.ph === 'lobby' ? (S.host === r.p ? 'host' : 'ready') : r.s + ' pts'}</span> <span class="sub" data-aw="${r.p}"></span>${kb}</span>${S.dr === r.p && S.ph !== 'lobby' ? PEN : ''}</li>`;
   }).join('');
 }
 $('#plist').addEventListener('click', e => {
@@ -470,7 +500,7 @@ function rateRow() {
 }
 function overlay() {
   const ov = $('#ov'), id = me(), host = S.host === id, isDr = S.dr === id;
-  const key = [S.ph, S.tid, isDr, host, !!lastCard, S.ph === 'choose' ? arr(SEC.ch).join() : '', S.ph === 'reveal' ? JSON.stringify(RATE) + S.word : '', S.ph === 'over' ? JSON.stringify(S.sc) : ''].join('|');
+  const key = [S.ph, S.tid, isDr, host, !!lastCard, S.ph === 'choose' ? arr(SEC.ch).join() : '', S.ph === 'reveal' ? S.word : '', S.ph === 'over' ? JSON.stringify(S.sc) : ''].join('|');
   if (S.ph === 'draw') { ov.className = ''; ovKey = key; return; }
   if (key !== ovKey) {
     ovKey = key; let h = '';
@@ -508,13 +538,14 @@ function overlay() {
         : `<div class="card pop">${avOf(S.dr, true)}<h2>${esc(nameOf(S.dr))} is choosing a word…</h2></div>`;
     } else if (S.ph === 'reveal') {
       const rs = Object.entries(S.gp).sort((a, b) => b[1] - a[1]);
-      h = `<div class="card pop"><h2>${S.word ? 'The word was <span class="code">' + esc(S.word) + '</span>' : 'Turn skipped'}</h2>${rs.length ? '<ul class="res">' + rs.map(([p, v]) => `<li><span>${esc(nameOf(p))}</span><span class="plus">+${v}</span></li>`).join('') + '</ul>' : '<p class="muted">Nobody guessed it this time.</p>'}${S.word ? rateRow() : ''}</div>`;
+      h = `<div class="card pop"><h2>${S.word ? 'The word was <span class="code">' + esc(S.word) + '</span>' : 'Turn skipped'}</h2>${rs.length ? '<ul class="res' + (rs.length > 4 ? ' many' : '') + '">' + rs.map(([p, v]) => `<li><span>${esc(nameOf(p))}</span><span class="plus">+${v}</span></li>`).join('') + '</ul>' : '<p class="muted">Nobody guessed it this time.</p>'}${S.word ? rateRow() : ''}</div>`;
     } else if (S.ph === 'over') {
       const t = Object.entries(S.sc).filter(([p]) => P[p]).sort((a, b) => b[1] - a[1]).slice(0, 3), ord = [t[1], t[0], t[2]], hs = [70, 110, 50];
       h = `<div class="card pop"><h2>${t[0] ? esc(nameOf(t[0][0])) + ' wins!' : 'Game over'}</h2><div class="podium">${ord.map((x, i) => x ? `<div>${avOf(x[0])}<span>${esc(nameOf(x[0]))}</span><span class="muted">${x[1]} pts</span><span class="bar" style="height:${hs[i]}px">${[2, 1, 3][i]}</span></div>` : '<div></div>').join('')}</div>${lastCard ? '<button class="big" id="shareCard" style="margin-top:12px">Share results</button>' : '<p class="muted">Making your results card…</p>'}<p class="muted small">Back to the lobby in a few seconds.</p></div>`;
     }
     ov.innerHTML = h; ov.className = 'show';
   }
+  if (S.ph === 'reveal') { const rr = $('#ov .rate'); if (rr) rr.outerHTML = rateRow(); }
   if (S.ph === 'lobby') {
     const f = document.activeElement, put = (i, v) => { const el = $(i); if (el && f !== el) el.value = v; };
     put('#sR', S.set.rounds); put('#sT', S.set.time); put('#sH', S.set.hints); put('#sM', S.set.max); put('#sD', S.set.diff || 'mixed'); put('#sW', S.set.custom || '');
@@ -569,6 +600,7 @@ function render() {
   if (d && !document.body.classList.contains('drawing')) { $('#tools').classList.remove('pal-open'); try { $('#msg').blur(); window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {} }
   document.body.classList.toggle('drawing', d);
   $('#reacts').hidden = S.ph === 'lobby';
+  fitBoard();
   const hb = $('#hintbar'); hb.hidden = d;
   if (S.ph === 'draw') hb.innerHTML = `<span>${S.g[id] ? 'Nice! Chat with the others who got it.' : esc(nameOf(S.dr)) + ' is drawing. Type your guesses in the chat.'}</span>${rateRow()}`;
   else hb.textContent = S.ph === 'lobby' ? 'Waiting in the lobby. Invite at least one friend to play.' : S.ph === 'choose' ? 'A new turn is starting…' : '';
@@ -628,7 +660,7 @@ function snapshot() {
   } catch (e) {}
 }
 function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
-async function buildCard() {
+async function buildCard(plain) {
   try {
     const W2 = 1080, H2 = 1350, c = document.createElement('canvas'); c.width = W2; c.height = H2; const g = c.getContext('2d');
     try { await document.fonts.load('700 64px Fredoka'); } catch (e) {}
@@ -643,7 +675,8 @@ async function buildCard() {
       const y = podY + i * 120; g.fillStyle = '#fff'; rr(g, 110, y, 860, 100, 26); g.fill();
       g.fillStyle = ['#ffd23f', '#d5dbe8', '#e9b183'][i]; g.beginPath(); g.arc(180, y + 50, 36, 0, 7); g.fill();
       g.fillStyle = '#1b1f3b'; g.font = '700 44px Fredoka, Nunito, sans-serif'; g.fillText(String(i + 1), 180, y + 66);
-      try { const ai = new Image(); await new Promise(r => { ai.onload = r; ai.onerror = r; ai.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(avOf(p).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="88" ')); }); g.drawImage(ai, 232, y + 8, 76, 84); } catch (e) {}
+      if (plain) { g.fillStyle = colOf(p); g.beginPath(); g.arc(270, y + 50, 30, 0, 7); g.fill(); }
+      else try { const ai = new Image(); await new Promise(r => { ai.onload = r; ai.onerror = r; ai.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(avOf(p).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="88" ')); }); g.drawImage(ai, 232, y + 8, 76, 84); } catch (e) {}
       g.textAlign = 'left'; g.fillStyle = '#1b1f3b'; g.font = '700 48px Nunito, sans-serif'; g.fillText(nameOf(p), 320, y + 66);
       g.textAlign = 'right'; g.fillStyle = '#2347c6'; g.fillText(v + ' pts', 940, y + 66); g.textAlign = 'center';
     }
@@ -656,9 +689,10 @@ async function buildCard() {
       g.fillText('Best drawing: "' + best.word + '" by ' + best.drName, W2 / 2, y + h + 70);
     }
     g.fillStyle = '#e4e9ff'; g.font = '700 36px Nunito, sans-serif'; g.fillText('Play with me at ' + location.host, W2 / 2, H2 - 50);
-    const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+    let blob = null; try { blob = await new Promise(r => c.toBlob(r, 'image/png')); } catch (e) { blob = null; }
+    if (!blob && !plain) return buildCard(true);
     if (blob) { lastCard = blob; ovKey = ''; render(); }
-  } catch (e) { console.error(e); }
+  } catch (e) { if (!plain) return buildCard(true); console.error(e); }
 }
 async function shareCard() {
   if (!lastCard) return;
@@ -677,3 +711,14 @@ async function cleanupRooms() {
     for (const c of old) { if (c === code) continue; await net.remove('rooms/' + c); await net.remove('roomIndex/' + c); }
   } catch (e) { /* not critical */ }
 }
+
+/* ---------- sideways phones: size the board to the space left above tools/hints ---------- */
+const shortLandscape = () => matchMedia('(orientation: landscape) and (max-height: 520px)').matches;
+function fitBoard() {
+  if (!shortLandscape()) { document.documentElement.style.removeProperty('--below'); return; }
+  let below = 0;
+  for (const el of $('#board').children) if (el.id !== 'wrap' && !el.hidden && getComputedStyle(el).display !== 'none') below += el.offsetHeight + 6;
+  document.documentElement.style.setProperty('--below', below + 'px');
+}
+window.addEventListener('resize', fitBoard);
+$('#tools').addEventListener('click', () => setTimeout(fitBoard, 0));
