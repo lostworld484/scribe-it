@@ -31,7 +31,9 @@
           ".read": "auth != null",
           "$tid": {
             ".write": "auth != null && root.child('rooms').child($code).child('state/host').val() === auth.uid",
-            "$uid": { ".write": "auth != null && auth.uid === $uid" }
+            "$uid": {
+              ".write": "auth != null && auth.uid === $uid"
+            }
           }
         },
         "draw": {
@@ -44,14 +46,18 @@
           ".read": "auth != null",
           "$tid": {
             ".write": "auth != null && root.child('rooms').child($code).child('state/host').val() === auth.uid",
-            "$uid": { ".write": "auth != null && auth.uid === $uid" }
+            "$uid": {
+              ".write": "auth != null && auth.uid === $uid"
+            }
           }
         },
         "kick": {
           ".read": "auth != null",
           "$t": {
             ".write": "auth != null && root.child('rooms').child($code).child('state/host').val() === auth.uid",
-            "$uid": { ".write": "auth != null && auth.uid === $uid" }
+            "$uid": {
+              ".write": "auth != null && auth.uid === $uid"
+            }
           }
         },
         "chat": {
@@ -60,7 +66,15 @@
             ".write": "auth != null && !data.exists() && newData.child('u').val() === auth.uid",
             ".validate": "newData.child('sys').exists() || (newData.child('txt').isString() && newData.child('txt').val().length <= 120)"
           }
-        }
+        },
+        ".write": "auth != null && root.child('roomIndex').child($code).exists() && root.child('roomIndex').child($code).val() < now - 86400000"
+      }
+    },
+    "roomIndex": {
+      ".read": "auth != null",
+      ".indexOn": ".value",
+      "$code": {
+        ".write": "auth != null && ((newData.isNumber() && newData.val() <= now + 60000) || (!newData.exists() && data.val() < now - 86400000))"
       }
     }
   }

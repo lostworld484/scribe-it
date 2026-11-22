@@ -9,3 +9,6 @@ export const FIREBASE_CONFIG = {
   messagingSenderId: '425832525445',
   appId: '1:425832525445:web:065016cd6b55bb36e283ec'
 };
+
+// Shown on the Privacy and Terms pages. Leave empty to hide the contact line.
+export const CONTACT_EMAIL = '';

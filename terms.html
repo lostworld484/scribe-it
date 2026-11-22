@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Terms of use · Scribe-It</title><meta name="theme-color" content="#2347c6"><link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:light dark;--blue:#2347c6;--card:#fff;--ink:#1b1f3b;--muted:#5d6386}
+@media(prefers-color-scheme:dark){:root{--blue:#14287a;--card:#1b2046;--ink:#eef0ff;--muted:#a9aed6}}
+*{box-sizing:border-box}body{margin:0;background:var(--blue);color:var(--ink);font:17px/1.65 Nunito,system-ui,sans-serif;padding:24px 14px 48px}
+main{max-width:760px;margin:auto;background:var(--card);border-radius:20px;padding:clamp(20px,4vw,44px);box-shadow:0 8px 0 rgba(0,0,0,.18)}
+h1,h2{font-family:Fredoka,sans-serif;line-height:1.1}h1{font-size:clamp(30px,5vw,42px);margin:0 0 4px}h2{font-size:22px;margin:30px 0 6px}
+.muted{color:var(--muted)}a{color:#3a63e0;font-weight:700}ul{padding-left:22px}li{margin:4px 0}
+.back{display:inline-block;color:#fff;margin:0 auto 14px;max-width:760px;width:100%;font-weight:800;text-decoration:none}
+.wrap{max-width:760px;margin:auto}
+</style></head><body><div class="wrap"><a class="back" href="/">‹ Back to Scribe-It</a></div><main>
+<h1>Terms of use</h1><p class="muted">Last updated 22 November 2026</p>
+<p>By playing Scribe-It you agree to these terms. If you don't agree, please don't use the game.</p>
+<h2>Who can play</h2><p>Scribe-It is meant for people aged 13 and over. Players under 18 should only play with a parent's or guardian's permission.</p>
+<h2>Play fair and be kind</h2>
+<p>When you play, please don't:</p>
+<ul>
+<li>draw, write or name yourself anything sexual, hateful, violent, threatening or otherwise offensive;</li>
+<li>bully, harass or target other players;</li>
+<li>share other people's personal information, or your own;</li>
+<li>spam the chat, reveal the word to other players, or use tools or tricks to cheat;</li>
+<li>try to break, overload or get around the game's security.</li>
+</ul>
+<p>The host of a room, or the other players by vote, can remove anyone from that room. We may also block access to the game for anyone who breaks these rules.</p>
+<h2>Your drawings and messages</h2>
+<p>What you draw and write stays yours. By playing, you allow it to be shown to the other players in your room, including on the end-of-game results card that players can choose to share. Game content is deleted as described in the <a href="/privacy.html">privacy policy</a>.</p>
+<h2>The game is provided as it is</h2>
+<p>Scribe-It is a free game made for fun. We try to keep it working well, but we can't promise it will always be available, error-free or that games won't be interrupted. We may change, pause or stop the game at any time.</p>
+<p>As far as the law allows, we are not responsible for any loss or harm arising from using the game, or for what other players draw or write.</p>
+<h2>Changes to these terms</h2><p>We may update these terms. The new version will be posted on this page with a new date, and continuing to play means you accept it.</p>
+<h2>Governing law</h2><p>These terms are governed by the laws of India.</p>
+<h2>Contact</h2><p id="contact">If you have a question about this page, you can reach the operator of Scribe-It <span id="cmail">through the person who invited you to play</span>.</p>
+</main>
+<script type="module">
+import { CONTACT_EMAIL } from '/js/config.js';
+if (CONTACT_EMAIL) { const a = document.createElement('a'); a.href = 'mailto:' + CONTACT_EMAIL; a.textContent = CONTACT_EMAIL; const s = document.getElementById('cmail'); s.textContent = 'by email at '; s.append(a); }
+</script></body></html>

@@ -1,4 +1,5 @@
-import { PACKS, DEFAULT_PACKS } from './words.js';
+import { PACKS, DEFAULT_PACKS, diffOf } from './words.js';
+import { avatarSvg, cleanAv, PARTS } from './avatar.js';
 import { connect } from './net.js';
 import { qrMatrix } from './qr.js';
 
@@ -22,7 +23,7 @@ function lev(a, b) { a = [...a]; b = [...b]; if (Math.abs(a.length - b.length) >
 async function sha(s) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('').slice(0, 24); }
 const guessHash = (w, tid) => sha(normG(w) + '|' + tid + '|' + code);
 const mask = (w, rev) => graph(w).map((g, i) => g === ' ' ? ' ' : (!isLetter(g) || rev.includes(i)) ? g : '_');
-const av = (c, big) => `<svg class="av" ${big ? 'style="width:72px;height:72px;margin:auto"' : ''} viewBox="0 0 40 40" aria-hidden="true"><path d="M20 3c10 0 17 6 17 17s-7 17-17 17S3 31 3 20 10 3 20 3z" fill="${okCol(c)}"/><circle cx="14" cy="18" r="4.5" fill="#fff"/><circle cx="26" cy="18" r="4.5" fill="#fff"/><circle cx="15" cy="19" r="2.2" fill="#1b1f3b"/><circle cx="27" cy="19" r="2.2" fill="#1b1f3b"/><path d="M14 27q6 5 12 0" stroke="#1b1f3b" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>`;
+const av = (c, big, a) => avatarSvg(c, a, big);
 const PEN = '<svg class="pen" viewBox="0 0 24 24" aria-label="drawing"><path d="M4 20l1-5L16 4l4 4L9 19z" fill="#ffd23f" stroke="#1b1f3b" stroke-width="1.6" stroke-linejoin="round"/><path d="M4 20l1-5 4 4z" fill="#f5c19a" stroke="#1b1f3b" stroke-width="1.6" stroke-linejoin="round"/></svg>';
 const THUMB = up => `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" style="${up ? '' : 'transform:rotate(180deg)'}"><path d="M7 10v10H3V10zm2 10h8.5a2 2 0 0 0 2-1.6l1.3-6.5A2 2 0 0 0 18.8 9.5H14l.8-4a1.8 1.8 0 0 0-3.3-1.3L9 9z" fill="currentColor"/></svg>`;
 
@@ -31,9 +32,10 @@ let unsubs = [], tidSubs = [], secUn = null, secKey = '', subTid = -1, joinedAt 
 let myKeys = new Set(), strokes = [], cur = null, sent = 0;
 let hostBusy = false, pendingG = [], pendingPick = null, pendingStart = false, pendingSet = null, pendingKick = [];
 let tool = 'brush', color = '#000000', size = 10, myCol = lget('dd-col') || AV[rnd(AV.length)];
+let myAv = (() => { try { return cleanAv(JSON.parse(lget('dd-av') || 'null') || { e: rnd(PARTS.e), m: rnd(PARTS.m), h: 0 }); } catch (e) { return cleanAv({}); } })();
 let ovKey = '', prevPh = '', prevTid = -1, lastSecs = -1, wasOnline = {}, muted = lget('dd-mute') === '1';
 
-const defState = () => ({ host: null, ph: 'lobby', set: { rounds: 3, time: 80, hints: 2, max: 12, packs: DEFAULT_PACKS, custom: '', only: false }, sc: {}, order: [], drawn: [], round: 0, dr: null, tid: 0, endAt: 0, g: {}, gp: {}, rev: [], hint: [], h: '', word: '', ban: {} });
+const defState = () => ({ host: null, ph: 'lobby', set: { rounds: 3, time: 80, hints: 2, max: 12, diff: 'mixed', packs: DEFAULT_PACKS, custom: '', only: false }, sc: {}, order: [], drawn: [], round: 0, dr: null, tid: 0, endAt: 0, g: {}, gp: {}, rev: [], hint: [], h: '', word: '', ban: {} });
 function normState(v) {
   const d = defState(), s = { ...d, ...v, set: { ...d.set, ...((v && v.set) || {}) } };
   s.order = arr(s.order); s.drawn = arr(s.drawn); s.rev = arr(s.rev).map(Number); s.hint = arr(s.hint); s.set.packs = arr(s.set.packs);
@@ -85,9 +87,18 @@ const pathCode = (location.pathname.match(/^\/r\/([a-z0-9]{1,12})\/?$/i) || [])[
 let last = null; try { last = JSON.parse(lget('dd-last') || 'null'); } catch (e) {}
 if (pathCode) $('#code').value = pathCode.toLowerCase();
 else if (last && Date.now() - last.at < 30 * 60000) { $('#code').value = last.code; $('#join-hint').textContent = 'You were in room ' + last.code + ' recently. Press Play to rejoin.'; }
-function drawSw() { $('#sws').innerHTML = AV.map(c => `<button class="sw" data-c="${c}" aria-label="Colour ${c}" aria-pressed="${c === myCol}">${av(c)}</button>`).join(''); }
+function drawSw() {
+  $('#sws').innerHTML = AV.map(c => `<button class="sw" data-c="${c}" aria-label="Colour ${c}" aria-pressed="${c === myCol}"><span style="background:${c}"></span></button>`).join('');
+  $('#avprev').innerHTML = av(myCol, 96, myAv);
+}
 drawSw();
 $('#sws').addEventListener('click', e => { const b = e.target.closest('.sw'); if (b) { myCol = b.dataset.c; lset('dd-col', myCol); drawSw(); } });
+$('#avedit').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.part) { const k = b.dataset.part, n = PARTS[k]; myAv[k] = (myAv[k] + (+b.dataset.dir) + n) % n; }
+  if (b.id === 'avrand') { myAv = { e: rnd(PARTS.e), m: rnd(PARTS.m), h: rnd(PARTS.h) }; myCol = AV[rnd(AV.length)]; lset('dd-col', myCol); }
+  lset('dd-av', JSON.stringify(myAv)); drawSw();
+});
 $('#join').addEventListener('click', join);
 let installEvt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('#install').hidden = false; });
@@ -125,7 +136,7 @@ async function join() {
     if (st && on >= max) throw new Error('This room is full (' + max + ' players). Try another code.');
     await net.tx(bp + '/state', cur => cur ? undefined : { ...defState(), host: me });
     code = c; base = bp; S = normState(st || { ...defState(), host: me }); P = pl;
-    await net.update(bp + '/players/' + me, { nick, col: myCol, t: (pl[me] && pl[me].t) || net.now(), online: true, seen: net.ts() });
+    await net.update(bp + '/players/' + me, { nick, col: myCol, av: myAv, t: (pl[me] && pl[me].t) || net.now(), online: true, seen: net.ts() });
     joinedAt = net.now(); wasOnline = {}; ovKey = ''; prevPh = ''; prevTid = -1; subTid = -1; $('#log').innerHTML = '';
     unsubs.push(net.presence(bp + '/players/' + me, () => ({ online: true, seen: net.ts() }), () => ({ online: false, seen: net.ts() })));
     unsubs.push(net.onValue(bp + '/state', v => { if (v) { S = normState(v); onState(); } }));
@@ -135,6 +146,7 @@ async function join() {
     lset('dd-last', JSON.stringify({ code: c, at: Date.now() }));
     try { const u = net.demo ? '?r=' + c : '/r/' + c; history.replaceState(null, '', u); history.pushState({ sg: 1 }, '', u); } catch (e) {}
     keepAwake(); shots = []; lastCard = null;
+    net.set('roomIndex/' + c, net.ts()).catch(() => {}); cleanupRooms();
     $('#home').style.display = 'none'; $('#game').style.display = 'grid';
     addMsg(net.demo ? 'Demo mode: open more tabs of this page to add players.' : 'You joined room ' + c + '. Invite friends with the link.', 'info');
     onState();
@@ -159,6 +171,7 @@ $('#dlgLeave').addEventListener('click', () => { $('#dlg').hidden = true; leave(
 const me = () => net.uid;
 const nameOf = id => (P[id] && String(P[id].nick || '').slice(0, 16)) || 'Someone';
 const colOf = id => okCol(P[id] && P[id].col);
+const avOf = (id, big) => av(colOf(id), big, P[id] && P[id].av);
 const onlineIds = () => Object.keys(P).filter(k => P[k] && P[k].online && !(S && S.ban[k]));
 const byT = (a, b) => ((+P[a].t || 0) - (+P[b].t || 0)) || (a < b ? -1 : 1);
 const canReadSecret = () => S && (S.dr === me() || S.host === me() || !!S.g[me()]);
@@ -211,7 +224,13 @@ function pool(set) {
   let p = []; for (const k of set.packs) if (PACKS[k]) p = p.concat(PACKS[k][1].split(','));
   p = p.concat(cu, cu, cu); return p.length >= 3 ? p : PACKS.classic[1].split(',');
 }
-function pickN(set) { const p = pool(set), o = []; let n = 0; while (o.length < 3 && n++ < 400) { const w = p[rnd(p.length)]; if (!o.includes(w)) o.push(w); } return o; }
+function pickN(set) {
+  let p = pool(set); const o = []; let n = 0;
+  if (set.diff && set.diff !== 'mixed') { const f = p.filter(w => diffOf(w) === set.diff); if (f.length >= 3) p = f; }
+  else for (const d of ['easy', 'medium', 'hard']) { const f = p.filter(w => diffOf(w) === d && !o.includes(w)); if (f.length) o.push(f[rnd(f.length)]); }
+  while (o.length < 3 && n++ < 400) { const w = p[rnd(p.length)]; if (!o.includes(w)) o.push(w); }
+  return o;
+}
 const hostWord = X => (SEC && SEC.w && subTid === X.tid ? SEC.w : '') || '';
 
 async function hostTick() {
@@ -224,6 +243,7 @@ async function hostTick() {
     }
     pendingG = []; return;
   }
+  if (Date.now() - lastBump > 60000) { lastBump = Date.now(); net.set('roomIndex/' + code, net.ts()).catch(() => {}); }
   const X = JSON.parse(JSON.stringify(S)); X.ban = X.ban || {};
   let ch = false; const on = onlineIds();
   if (pendingSet) { X.set = { ...X.set, ...pendingSet }; pendingSet = null; ch = true; }
@@ -431,7 +451,7 @@ function plist() {
     const away = !on.includes(r.p), got = S.ph === 'draw' && S.g[r.p], votes = Object.keys(KICK[r.p] || {}).length, mine = KICK[r.p] && KICK[r.p][id];
     const kb = r.p === id ? '' : host ? `<button class="kick" data-kick="${r.p}" aria-label="Remove ${esc(nameOf(r.p))}">Kick</button>`
       : `<button class="kick" data-vote="${r.p}" aria-pressed="${!!mine}" aria-label="Vote to remove ${esc(nameOf(r.p))}">Vote kick${votes ? ' ' + votes + '/' + need : ''}</button>`;
-    return `<li class="${got ? 'got' : ''} ${away ? 'away' : ''}"><span class="rk">#${i + 1}</span>${av(colOf(r.p))}<span><span class="nm">${esc(nameOf(r.p))}${r.p === id ? ' (you)' : ''}</span><br><span class="sub">${S.ph === 'lobby' ? (S.host === r.p ? 'host' : 'ready') : r.s + ' pts'}</span> <span class="sub" data-aw="${r.p}"></span>${kb}</span>${S.dr === r.p && S.ph !== 'lobby' ? PEN : ''}</li>`;
+    return `<li class="${got ? 'got' : ''} ${away ? 'away' : ''}"><span class="rk">#${i + 1}</span>${avOf(r.p)}<span><span class="nm">${esc(nameOf(r.p))}${r.p === id ? ' (you)' : ''}</span><br><span class="sub">${S.ph === 'lobby' ? (S.host === r.p ? 'host' : 'ready') : r.s + ' pts'}</span> <span class="sub" data-aw="${r.p}"></span>${kb}</span>${S.dr === r.p && S.ph !== 'lobby' ? PEN : ''}</li>`;
   }).join('');
 }
 $('#plist').addEventListener('click', e => {
@@ -464,26 +484,27 @@ function overlay() {
           <label>Draw time${sel('sT', [40, 60, 80, 100, 120, 150], n => n + ' seconds')}</label>
           <label>Hint letters${sel('sH', [0, 1, 2, 3, 4, 5])}</label>
           <label>Max players${sel('sM', [4, 6, 8, 10, 12, 16, 20])}</label>
+          <label>Difficulty<select id="sD" ${dis}>${[['mixed', 'Mixed'], ['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
         </div>
         <b class="small">Word packs</b><div class="packs">${pk}</div>
         <label class="lbl">Your own words, comma separated<textarea id="sW" rows="2" maxlength="600" ${dis} placeholder="e.g. office chai, goa trip, uncle's scooter"></textarea></label>
         <label class="chk"><input type="checkbox" id="sO" ${dis}> Only use our own words (needs 3 or more)</label>
         ${host ? '<button class="big" id="go">Start game</button>' : '<p class="muted" id="wt"></p>'}</div>`;
     } else if (S.ph === 'choose') {
-      h = isDr ? `<div class="card pop"><h2>Choose a word</h2><div class="choices">${arr(SEC.ch).map((c, i) => `<button data-i="${i}">${esc(c)}</button>`).join('') || '<p class="muted">Loading words…</p>'}</div></div>`
-        : `<div class="card pop">${av(colOf(S.dr), 1)}<h2>${esc(nameOf(S.dr))} is choosing a word…</h2></div>`;
+      h = isDr ? `<div class="card pop"><h2>Choose a word</h2><div class="choices">${arr(SEC.ch).map((c, i) => { const d = diffOf(c); return `<button data-i="${i}">${esc(c)}<small class="df df-${d}">${d[0].toUpperCase() + d.slice(1)}</small></button>`; }).join('') || '<p class="muted">Loading words…</p>'}</div></div>`
+        : `<div class="card pop">${avOf(S.dr, true)}<h2>${esc(nameOf(S.dr))} is choosing a word…</h2></div>`;
     } else if (S.ph === 'reveal') {
       const rs = Object.entries(S.gp).sort((a, b) => b[1] - a[1]);
       h = `<div class="card pop"><h2>${S.word ? 'The word was <span class="code">' + esc(S.word) + '</span>' : 'Turn skipped'}</h2>${rs.length ? '<ul class="res">' + rs.map(([p, v]) => `<li><span>${esc(nameOf(p))}</span><span class="plus">+${v}</span></li>`).join('') + '</ul>' : '<p class="muted">Nobody guessed it this time.</p>'}${S.word ? rateRow() : ''}</div>`;
     } else if (S.ph === 'over') {
       const t = Object.entries(S.sc).filter(([p]) => P[p]).sort((a, b) => b[1] - a[1]).slice(0, 3), ord = [t[1], t[0], t[2]], hs = [70, 110, 50];
-      h = `<div class="card pop"><h2>${t[0] ? esc(nameOf(t[0][0])) + ' wins!' : 'Game over'}</h2><div class="podium">${ord.map((x, i) => x ? `<div>${av(colOf(x[0]))}<span>${esc(nameOf(x[0]))}</span><span class="muted">${x[1]} pts</span><span class="bar" style="height:${hs[i]}px">${[2, 1, 3][i]}</span></div>` : '<div></div>').join('')}</div>${lastCard ? '<button class="big" id="shareCard" style="margin-top:12px">Share results</button>' : '<p class="muted">Making your results card…</p>'}<p class="muted small">Back to the lobby in a few seconds.</p></div>`;
+      h = `<div class="card pop"><h2>${t[0] ? esc(nameOf(t[0][0])) + ' wins!' : 'Game over'}</h2><div class="podium">${ord.map((x, i) => x ? `<div>${avOf(x[0])}<span>${esc(nameOf(x[0]))}</span><span class="muted">${x[1]} pts</span><span class="bar" style="height:${hs[i]}px">${[2, 1, 3][i]}</span></div>` : '<div></div>').join('')}</div>${lastCard ? '<button class="big" id="shareCard" style="margin-top:12px">Share results</button>' : '<p class="muted">Making your results card…</p>'}<p class="muted small">Back to the lobby in a few seconds.</p></div>`;
     }
     ov.innerHTML = h; ov.className = 'show';
   }
   if (S.ph === 'lobby') {
     const f = document.activeElement, put = (i, v) => { const el = $(i); if (el && f !== el) el.value = v; };
-    put('#sR', S.set.rounds); put('#sT', S.set.time); put('#sH', S.set.hints); put('#sM', S.set.max); put('#sW', S.set.custom || '');
+    put('#sR', S.set.rounds); put('#sT', S.set.time); put('#sH', S.set.hints); put('#sM', S.set.max); put('#sD', S.set.diff || 'mixed'); put('#sW', S.set.custom || '');
     const o = $('#sO'); if (o) o.checked = !!S.set.only;
     document.querySelectorAll('[data-pk]').forEach(b => b.setAttribute('aria-pressed', S.set.packs.includes(b.dataset.pk)));
     const wt = $('#wt'); if (wt) wt.textContent = 'Waiting for ' + nameOf(S.host) + ' to start the game…';
@@ -506,6 +527,7 @@ $('#ov').addEventListener('change', e => {
   if (m[id]) pendingSet = { ...(pendingSet || {}), [m[id]]: +e.target.value };
   if (id === 'sW') pendingSet = { ...(pendingSet || {}), custom: e.target.value.slice(0, 600) };
   if (id === 'sO') pendingSet = { ...(pendingSet || {}), only: e.target.checked };
+  if (id === 'sD') pendingSet = { ...(pendingSet || {}), diff: ['mixed', 'easy', 'medium', 'hard'].includes(e.target.value) ? e.target.value : 'mixed' };
 });
 function rate(v) { const id = me(); if (S.dr === id) return; net.set(`${base}/rate/${S.tid}/${id}`, RATE[id] === v ? null : v); }
 $('#hintbar').addEventListener('click', e => { const b = e.target.closest('[data-rate]'); if (b) rate(+b.dataset.rate); });
@@ -591,14 +613,14 @@ async function buildCard() {
     const top = Object.entries(S.sc).sort((a, b) => b[1] - a[1]).slice(0, 3);
     const best = shots.filter(x => x.img).sort((a, b) => b.score - a.score)[0];
     const podY = best ? 300 : 360;
-    top.forEach(([p, v], i) => {
+    for (const [i, [p, v]] of top.entries()) {
       const y = podY + i * 120; g.fillStyle = '#fff'; rr(g, 110, y, 860, 100, 26); g.fill();
       g.fillStyle = ['#ffd23f', '#d5dbe8', '#e9b183'][i]; g.beginPath(); g.arc(180, y + 50, 36, 0, 7); g.fill();
       g.fillStyle = '#1b1f3b'; g.font = '700 44px Fredoka, Nunito, sans-serif'; g.fillText(String(i + 1), 180, y + 66);
-      g.fillStyle = colOf(p); g.beginPath(); g.arc(270, y + 50, 30, 0, 7); g.fill();
+      try { const ai = new Image(); await new Promise(r => { ai.onload = r; ai.onerror = r; ai.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(avOf(p).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="88" ')); }); g.drawImage(ai, 232, y + 8, 76, 84); } catch (e) {}
       g.textAlign = 'left'; g.fillStyle = '#1b1f3b'; g.font = '700 48px Nunito, sans-serif'; g.fillText(nameOf(p), 320, y + 66);
       g.textAlign = 'right'; g.fillStyle = '#2347c6'; g.fillText(v + ' pts', 940, y + 66); g.textAlign = 'center';
-    });
+    }
     if (best) {
       const img = new Image(); await new Promise(r => { img.onload = r; img.onerror = r; img.src = best.img; });
       const y = podY + top.length * 120 + 40, w = 720, h = 540, x = (W2 - w) / 2;
@@ -617,4 +639,15 @@ async function shareCard() {
   const file = new File([lastCard], 'scribe-it-results.png', { type: 'image/png' });
   try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text: 'We just played Scribe-It! Join us: ' + location.origin }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(lastCard); a.download = 'scribe-it-results.png'; document.body.append(a); a.click(); a.remove();
+}
+
+/* ---------- old-room cleanup ---------- */
+// Rooms nobody has touched for a day are deleted by whichever player next opens the game.
+let lastBump = 0, cleaned = false;
+async function cleanupRooms() {
+  if (cleaned || !net) return; cleaned = true;
+  try {
+    const old = await net.staleRooms(net.now() - 24 * 3600 * 1000, 10);
+    for (const c of old) { if (c === code) continue; await net.remove('rooms/' + c); await net.remove('roomIndex/' + c); }
+  } catch (e) { /* not critical */ }
 }

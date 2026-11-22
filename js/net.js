@@ -41,6 +41,7 @@ async function firebase() {
     onChild: (p, cb, limit) => D.onChildAdded(limit ? D.query(r(p), D.limitToLast(limit)) : r(p), s => cb(s.key, s.val()), () => {}),
     tx: (p, fn) => D.runTransaction(r(p), fn),
     onConn: cb => D.onValue(r('.info/connected'), x => cb(x.val() === true)),
+    staleRooms: async (before, n) => Object.keys((await D.get(D.query(r('roomIndex'), D.orderByValue(), D.endAt(before), D.limitToFirst(n)))).val() || {}),
     presence(p, online, offline) {
       const un = D.onValue(r('.info/connected'), s => {
         if (s.val() === true) D.onDisconnect(r(p)).update(offline()).then(() => D.update(r(p), online())).catch(() => {});
@@ -87,6 +88,7 @@ function demo() {
     push: (p, v) => { const k = key(); write(d => setAt(d, p + '/' + k, v)); return { key: k }; },
     newKey: () => key(),
     onConn: cb => { setTimeout(() => cb(true), 0); return () => {}; },
+    staleRooms: async (before, n) => Object.entries(getAt(load(), 'roomIndex') || {}).filter(([k, v]) => v < before).sort((a, b) => a[1] - b[1]).slice(0, n).map(x => x[0]),
     onValue: (p, cb) => { const l = { p, cb, last: undefined }; vals.add(l); soon(); return () => vals.delete(l); },
     onChild: (p, cb, limit) => {
       const o = getAt(load(), p) || {}, ks = Object.keys(o).sort();

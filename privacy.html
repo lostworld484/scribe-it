@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privacy policy · Scribe-It</title><meta name="theme-color" content="#2347c6"><link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:light dark;--blue:#2347c6;--card:#fff;--ink:#1b1f3b;--muted:#5d6386}
+@media(prefers-color-scheme:dark){:root{--blue:#14287a;--card:#1b2046;--ink:#eef0ff;--muted:#a9aed6}}
+*{box-sizing:border-box}body{margin:0;background:var(--blue);color:var(--ink);font:17px/1.65 Nunito,system-ui,sans-serif;padding:24px 14px 48px}
+main{max-width:760px;margin:auto;background:var(--card);border-radius:20px;padding:clamp(20px,4vw,44px);box-shadow:0 8px 0 rgba(0,0,0,.18)}
+h1,h2{font-family:Fredoka,sans-serif;line-height:1.1}h1{font-size:clamp(30px,5vw,42px);margin:0 0 4px}h2{font-size:22px;margin:30px 0 6px}
+.muted{color:var(--muted)}a{color:#3a63e0;font-weight:700}ul{padding-left:22px}li{margin:4px 0}
+.back{display:inline-block;color:#fff;margin:0 auto 14px;max-width:760px;width:100%;font-weight:800;text-decoration:none}
+.wrap{max-width:760px;margin:auto}
+</style></head><body><div class="wrap"><a class="back" href="/">‹ Back to Scribe-It</a></div><main>
+<h1>Privacy policy</h1><p class="muted">Last updated 22 November 2026</p>
+<p>Scribe-It is a free drawing and guessing game you play with friends in your browser. This page explains what information the game uses, why, and how long it is kept. In short: there are no accounts, no ads and no selling of data, and game data is deleted soon after you stop playing.</p>
+<h2>What we collect</h2>
+<ul>
+<li><b>What you choose to share:</b> the nickname and avatar you pick, the room code you join, and what you do in a game: drawings, chat messages, guesses, reactions, drawing ratings and scores.</li>
+<li><b>A guest ID:</b> when you open the game you are given a random, anonymous guest ID so the game can recognise you if you reconnect. It is not linked to your name, email or phone number.</li>
+<li><b>Connection status:</b> whether you are online in a room and when you were last seen, so your spot can be held for 60 seconds if you disconnect.</li>
+</ul>
+<p>We do not ask for your real name, email, phone number, location, contacts, camera or microphone.</p>
+<h2>What is visible to other players</h2>
+<p>Everyone in the same room can see your nickname, avatar, drawings, chat messages, reactions and score. Anyone with the room link or code can join a room, so please don't share personal details in chat or drawings.</p>
+<h2>Where it is stored and who handles it</h2>
+<ul>
+<li><b>Google Firebase</b> runs the live game (database and guest sign-in). Game data is stored on Firebase's servers in Singapore. See <a href="https://firebase.google.com/support/privacy" rel="noopener">Firebase's privacy information</a>.</li>
+<li><b>Vercel</b> hosts the website and, like any web host, may keep short-lived technical logs such as IP addresses to keep the site running and secure.</li>
+<li><b>Google Fonts</b> provides the lettering, so your browser contacts Google's font servers when the page loads.</li>
+</ul>
+<p>We don't use advertising, tracking cookies or analytics, and we don't sell or rent any information.</p>
+<h2>How long it is kept</h2>
+<ul>
+<li>Drawings, guesses and ratings for a turn are deleted when the next turn starts.</li>
+<li>A whole room, including its chat and scores, is deleted after about 24 hours without activity.</li>
+<li>Guest IDs that are more than 30 days old may be deleted automatically.</li>
+<li>Results cards are made on your own device and only leave it if you choose to share them.</li>
+</ul>
+<h2>On your device</h2>
+<p>The game saves a few settings in your browser's local storage so you don't have to re-enter them: your nickname, avatar, sound setting and the last room you were in. You can clear these at any time by clearing your browser's site data.</p>
+<h2>Children</h2>
+<p>Scribe-It is meant for people aged 13 and over. Players under 18 should only play with a parent's or guardian's permission, and should play in rooms with people they know.</p>
+<h2>Your choices</h2>
+<ul><li>You can leave a room at any time with the Leave button.</li><li>You can clear the data saved on your device through your browser settings.</li><li>You can ask for data linked to your guest ID to be deleted by using the contact details below.</li></ul>
+<h2>Changes</h2><p>If this policy changes, the new version will be posted on this page with a new date.</p>
+<h2>Contact</h2><p id="contact">If you have a question about this page, you can reach the operator of Scribe-It <span id="cmail">through the person who invited you to play</span>.</p>
+</main>
+<script type="module">
+import { CONTACT_EMAIL } from '/js/config.js';
+if (CONTACT_EMAIL) { const a = document.createElement('a'); a.href = 'mailto:' + CONTACT_EMAIL; a.textContent = CONTACT_EMAIL; const s = document.getElementById('cmail'); s.textContent = 'by email at '; s.append(a); }
+</script></body></html>
