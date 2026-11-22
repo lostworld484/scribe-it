@@ -426,6 +426,7 @@ function onChat(m) {
     if (m.sys === 'g') { addMsg(nameOf(m.p) + ' guessed the word!', 'good'); if (fresh) sfx(m.p === me() ? 'ok' : 'pop'); }
     else if (m.sys === 'l') addMsg(nameOf(m.p) + ' was away too long and left the game', 'bad');
     else if (m.sys === 'k') addMsg(nameOf(m.p) + ' was removed from the room', 'bad');
+    else if (m.sys === 'part') { if ((m.p || m.to) === me()) { addMsg('“' + String(m.txt || '').slice(0, 40) + '” is part of the answer!', 'close'); if (fresh) sfx('close'); } }
     else if (m.sys === 'close') {
       const who = m.p || m.to;
       if (who === me()) { addMsg('“' + String(m.txt || '').slice(0, 120) + '” is very close!', 'close'); if (fresh) sfx('close'); }
@@ -438,7 +439,16 @@ function onChat(m) {
   else addMsg(t, '', m.u);
   if (fresh && !m.priv && S.host === me() && S.ph === 'draw' && m.u !== S.dr && !S.g[m.u]) {
     const w = hostWord(S);
-    if (w) { const a = normG(t), b = normG(w), d = lev(a, b), lim = [...b].length >= 5 ? 2 : 1; if (d > 0 && d <= lim) sys('close', m.u, { to: m.u, txt: t }); }
+    if (w) {
+      const a = normG(t), b = normG(w), d = lev(a, b), lim = [...b].length >= 5 ? 2 : 1;
+      if (d > 0 && d <= lim) sys('close', m.u, { to: m.u, txt: t });
+      else {
+        // Multi-word answers: tell only the guesser when one of their words is in the answer.
+        const SMALL = new Set(['a', 'an', 'the', 'of', 'on', 'in', 'with', 'and', 'at', 'to', 'for', 'is']);
+        const aw = b.split(' '), gw = a.split(' ');
+        if (aw.length > 1) { const hit = gw.find(x => x.length > 1 && !SMALL.has(x) && aw.includes(x)); if (hit) sys('part', m.u, { to: m.u, txt: hit }); }
+      }
+    }
   }
 }
 $('#cf').addEventListener('submit', async e => {
