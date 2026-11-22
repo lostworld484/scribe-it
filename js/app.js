@@ -35,7 +35,7 @@ let tool = 'brush', color = '#000000', size = 10, myCol = lget('dd-col') || AV[r
 let myAv = (() => { try { return cleanAv(JSON.parse(lget('dd-av') || 'null') || { e: rnd(PARTS.e), m: rnd(PARTS.m), h: 0 }); } catch (e) { return cleanAv({}); } })();
 let ovKey = '', prevPh = '', prevTid = -1, lastSecs = -1, wasOnline = {}, muted = lget('dd-mute') === '1';
 
-const defState = () => ({ host: null, ph: 'lobby', set: { rounds: 3, time: 80, hints: 2, max: 12, diff: 'mixed', packs: DEFAULT_PACKS, custom: '', only: false }, sc: {}, order: [], drawn: [], round: 0, dr: null, tid: 0, endAt: 0, g: {}, gp: {}, rev: [], hint: [], h: '', word: '', ban: {} });
+const defState = () => ({ host: null, ph: 'lobby', set: { rounds: 3, time: 80, hints: 2, max: 12, diff: 'mixed', pmode: 'all', packs: DEFAULT_PACKS, custom: '', only: false }, sc: {}, order: [], drawn: [], round: 0, dr: null, tid: 0, endAt: 0, g: {}, gp: {}, rev: [], hint: [], h: '', word: '', ban: {} });
 function normState(v) {
   const d = defState(), s = { ...d, ...v, set: { ...d.set, ...((v && v.set) || {}) } };
   s.order = arr(s.order); s.drawn = arr(s.drawn); s.rev = arr(s.rev).map(Number); s.hint = arr(s.hint); s.set.packs = arr(s.set.packs);
@@ -221,7 +221,8 @@ function sys(type, p, extra) { return net.push(base + '/chat', { u: me(), sys: t
 function pool(set) {
   const cu = String(set.custom || '').split(',').map(s => s.trim()).filter(s => s && s.length <= 30);
   if (set.only && cu.length >= 3) return cu;
-  let p = []; for (const k of set.packs) if (PACKS[k]) p = p.concat(PACKS[k][1].split(','));
+  const keys = set.pmode === 'custom' ? set.packs : Object.keys(PACKS);
+  let p = []; for (const k of keys) if (PACKS[k]) p = p.concat(PACKS[k][1].split(','));
   p = p.concat(cu, cu, cu); return p.length >= 3 ? p : PACKS.classic[1].split(',');
 }
 function pickN(set) {
@@ -231,6 +232,8 @@ function pickN(set) {
   while (o.length < 3 && n++ < 400) { const w = p[rnd(p.length)]; if (!o.includes(w)) o.push(w); }
   return o;
 }
+const PACK_ORDER = ['classic', 'nature', 'food', 'household', 'vehicles', 'places', 'sports', 'people', 'body', 'school', 'tech', 'fantasy', 'festivals', 'desi', 'silly', 'hindi'].filter(k => PACKS[k]);
+const packSize = k => PACKS[k][1].split(',').length;
 const hostWord = X => (SEC && SEC.w && subTid === X.tid ? SEC.w : '') || '';
 
 async function hostTick() {
@@ -473,23 +476,33 @@ function overlay() {
     ovKey = key; let h = '';
     if (S.ph === 'lobby') {
       const dis = host ? '' : 'disabled', sel = (id2, opts, fmt) => `<select id="${id2}" ${dis}>${opts.map(n => `<option value="${n}">${fmt ? fmt(n) : n}</option>`).join('')}</select>`;
-      const pk = Object.entries(PACKS).map(([k, v]) => `<button class="chip" data-pk="${k}" aria-pressed="${S.set.packs.includes(k)}" ${dis}>${esc(v[0])}</button>`).join('');
+      const tiles = PACK_ORDER.map(k => `<button class="pk" data-pk="${k}" aria-pressed="false" ${dis}><span class="ck" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="pkn">${esc(PACKS[k][0])}</span><span class="pkc">${packSize(k)} words</span></button>`).join('');
       const link = shareLink(), wa = 'https://wa.me/?text=' + encodeURIComponent('Come play Scribe-It with me! ' + link);
-      h = `<div class="card pop"><h2>Room <span class="code">${esc(code)}</span></h2>
+      h = `<div class="card pop lobby"><h2>Room <span class="code">${esc(code)}</span></h2>
         <div class="share"><input id="lnk" readonly value="${esc(link)}" aria-label="Room link"><button class="ghost" id="cp">Copy link</button><a class="wa" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>${navigator.share ? '<button class="ghost" id="nsh">Share</button>' : ''}<button class="ghost" id="qrb">QR code</button></div>
         <div id="qrbox" hidden><div class="qr">${qrSvg(link)}</div><p class="muted small">Friends nearby can scan this with their phone camera to join.</p></div>
-        ${lastCard ? '<button class="ghost" id="shareCard" style="width:100%;margin-bottom:8px">Share last game\'s results</button>' : ''}
+        ${lastCard ? '<button class="ghost" id="shareCard" style="width:100%;margin-top:8px">Share last game\'s results</button>' : ''}
+        <section class="sec"><div class="sech"><b>Players here</b><span class="muted small" id="lobn"></span></div><div class="lobpl" id="lobpl"></div></section>
+        <section class="sec"><div class="sech"><b>Game settings</b></div>
         <div class="set">
           <label>Rounds${sel('sR', [2, 3, 4, 5, 6, 8])}</label>
-          <label>Draw time${sel('sT', [40, 60, 80, 100, 120, 150], n => n + ' seconds')}</label>
+          <label>Draw time${sel('sT', [40, 60, 80, 100, 120, 150], n => n + ' sec')}</label>
+          <label>Difficulty<select id="sD" ${dis}>${[['mixed', 'Mixed'], ['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
           <label>Hint letters${sel('sH', [0, 1, 2, 3, 4, 5])}</label>
           <label>Max players${sel('sM', [4, 6, 8, 10, 12, 16, 20])}</label>
-          <label>Difficulty<select id="sD" ${dis}>${[['mixed', 'Mixed'], ['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
-        </div>
-        <b class="small">Word packs</b><div class="packs">${pk}</div>
-        <label class="lbl">Your own words, comma separated<textarea id="sW" rows="2" maxlength="600" ${dis} placeholder="e.g. office chai, goa trip, uncle's scooter"></textarea></label>
-        <label class="chk"><input type="checkbox" id="sO" ${dis}> Only use our own words (needs 3 or more)</label>
-        ${host ? '<button class="big" id="go">Start game</button>' : '<p class="muted" id="wt"></p>'}</div>`;
+        </div></section>
+        <section class="sec"><div class="sech"><b>Word packs</b><span class="muted small" id="pkcount"></span></div>
+          <div class="seg" role="group" aria-label="Word packs"><button data-pm="all" aria-pressed="true" ${dis}>All packs</button><button data-pm="custom" aria-pressed="false" ${dis}>Choose packs</button></div>
+          <div id="pkpick" hidden>
+            ${host ? '<div class="pkq"><span class="muted small">Tap a pack to turn it on or off.</span><button class="mini" id="pkAll">Select all</button></div>' : ''}
+            <div class="packs">${tiles}</div>
+          </div>
+        </section>
+        <details class="sec own" ${S.set.custom ? 'open' : ''}><summary>Add your own words</summary>
+          <textarea id="sW" rows="2" maxlength="600" ${dis} aria-label="Your own words, comma separated" placeholder="Comma separated, e.g. office chai, goa trip, uncle's scooter"></textarea>
+          <label class="chk"><input type="checkbox" id="sO" ${dis}> Only use our own words (needs 3 or more)</label>
+        </details>
+        ${host ? '<button class="big" id="go">Start game</button>' : '<p class="muted center" id="wt"></p>'}</div>`;
     } else if (S.ph === 'choose') {
       h = isDr ? `<div class="card pop"><h2>Choose a word</h2><div class="choices">${arr(SEC.ch).map((c, i) => { const d = diffOf(c); return `<button data-i="${i}">${esc(c)}<small class="df df-${d}">${d[0].toUpperCase() + d.slice(1)}</small></button>`; }).join('') || '<p class="muted">Loading words…</p>'}</div></div>`
         : `<div class="card pop">${avOf(S.dr, true)}<h2>${esc(nameOf(S.dr))} is choosing a word…</h2></div>`;
@@ -506,7 +519,14 @@ function overlay() {
     const f = document.activeElement, put = (i, v) => { const el = $(i); if (el && f !== el) el.value = v; };
     put('#sR', S.set.rounds); put('#sT', S.set.time); put('#sH', S.set.hints); put('#sM', S.set.max); put('#sD', S.set.diff || 'mixed'); put('#sW', S.set.custom || '');
     const o = $('#sO'); if (o) o.checked = !!S.set.only;
-    document.querySelectorAll('[data-pk]').forEach(b => b.setAttribute('aria-pressed', S.set.packs.includes(b.dataset.pk)));
+    const custom = S.set.pmode === 'custom', on = custom ? S.set.packs.filter(k => PACKS[k]) : PACK_ORDER;
+    document.querySelectorAll('[data-pk]').forEach(b => b.setAttribute('aria-pressed', on.includes(b.dataset.pk)));
+    document.querySelectorAll('[data-pm]').forEach(b => b.setAttribute('aria-pressed', (b.dataset.pm === 'custom') === custom));
+    const pp = $('#pkpick'); if (pp) pp.hidden = !custom;
+    const pc = $('#pkcount'); if (pc) pc.textContent = custom ? `${on.length} of ${PACK_ORDER.length} on · ${on.reduce((t, k) => t + packSize(k), 0).toLocaleString()} words` : `${PACK_ORDER.reduce((t, k) => t + packSize(k), 0).toLocaleString()} words`;
+    const ids = onlineIds().sort(byT), lp = $('#lobpl');
+    if (lp) lp.innerHTML = ids.map(p => `<div class="lp">${avOf(p)}<span>${esc(nameOf(p))}${p === me() ? ' (you)' : ''}</span>${S.host === p ? '<small>host</small>' : ''}</div>`).join('');
+    const ln = $('#lobn'); if (ln) ln.textContent = ids.length === 1 ? 'Just you so far' : ids.length + ' players';
     const wt = $('#wt'); if (wt) wt.textContent = 'Waiting for ' + nameOf(S.host) + ' to start the game…';
   }
 }
@@ -517,7 +537,13 @@ $('#ov').addEventListener('click', e => {
   if (b.id === 'qrb') { const q = $('#qrbox'); q.hidden = !q.hidden; return; }
   if (b.id === 'shareCard') { shareCard(); return; }
   if (b.id === 'go' && S.host === me()) { pendingStart = true; b.disabled = true; b.textContent = 'Starting…'; }
-  if (b.dataset.pk && S.host === me()) { const k = b.dataset.pk, p = S.set.packs; pendingSet = { ...(pendingSet || {}), packs: p.includes(k) ? (p.length > 1 ? p.filter(x => x !== k) : p) : [...p, k] }; }
+  if (b.dataset.pm && S.host === me()) { pendingSet = { ...(pendingSet || {}), pmode: b.dataset.pm === 'custom' ? 'custom' : 'all', ...(b.dataset.pm === 'custom' && S.set.pmode !== 'custom' ? { packs: PACK_ORDER.slice() } : {}) }; return; }
+  if (b.id === 'pkAll' && S.host === me()) { pendingSet = { ...(pendingSet || {}), packs: PACK_ORDER.slice() }; return; }
+  if (b.dataset.pk && S.host === me()) {
+    const k = b.dataset.pk, p = ((pendingSet && pendingSet.packs) || S.set.packs).filter(x => PACKS[x]);
+    const next = p.includes(k) ? (p.length > 1 ? p.filter(x => x !== k) : p) : [...p, k];
+    pendingSet = { ...(pendingSet || {}), packs: next }; b.setAttribute('aria-pressed', next.includes(k)); return;
+  }
   if (b.dataset.i != null && S.ph === 'choose' && S.dr === me()) { net.set(`${base}/pick/${S.tid}`, +b.dataset.i); b.parentNode.querySelectorAll('button').forEach(x => x.disabled = true); }
   if (b.dataset.rate) rate(+b.dataset.rate);
 });
