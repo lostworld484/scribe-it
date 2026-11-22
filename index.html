@@ -180,8 +180,9 @@ h1,h2{font-family:Fredoka,sans-serif;line-height:1.05;margin:0;text-wrap:balance
 #qrbox{margin:8px 0}.qr{width:200px;max-width:70%;margin:auto;border-radius:12px;overflow:hidden;border:2px solid var(--line)}.qr svg{display:block;width:100%;height:auto}
 #peek{display:none;flex-basis:100%}
 #cf #msg{flex:1 1 0;width:auto;min-width:0}
-#pl li:nth-child(1) .rk{color:#d9a400}#pl li:nth-child(2) .rk{color:#8a94a6}#pl li:nth-child(3) .rk{color:#b8733b}
-#pl li:nth-child(-n+3) .rk{font-size:16px;font-weight:900}
+#pl .rk1{color:#d9a400}#pl .rk2{color:#8a94a6}#pl .rk3{color:#b8733b}
+#pl .rk1,#pl .rk2,#pl .rk3{font-size:16px;font-weight:900}
+.big:disabled{background:var(--soft);color:var(--muted);box-shadow:none;cursor:default}
 @media(max-width:900px){#game{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"top top" "board board" "pl chat"}#chat{height:340px;max-height:none}#top{grid-template-columns:auto minmax(0,1fr)}#roundlab{grid-column:1/-1;justify-content:center}}
 @media(max-width:700px){#home{grid-template-columns:minmax(0,1fr)}.hero{order:-1;max-width:420px}.steps{grid-template-columns:minmax(0,1fr)}.set{grid-template-columns:1fr 1fr}.share input{flex-basis:100%}}
 @media(max-width:700px){

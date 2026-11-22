@@ -236,6 +236,8 @@ function pickN(set) {
 }
 const PACK_ORDER = ['classic', 'nature', 'food', 'household', 'vehicles', 'places', 'sports', 'people', 'body', 'school', 'tech', 'fantasy', 'festivals', 'desi', 'silly', 'hindi'].filter(k => PACKS[k]);
 const packSize = k => PACKS[k][1].split(',').length;
+// Players with the same score share a place: 100, 100, 80 -> 1st, 1st, 3rd.
+const rankOf = (score, all) => 1 + all.filter(v => v > score).length;
 const hostWord = X => (SEC && SEC.w && subTid === X.tid ? SEC.w : '') || '';
 
 async function hostTick() {
@@ -263,7 +265,9 @@ async function hostTick() {
     if (voters.length >= Math.max(2, Math.floor((on.length - 1) / 2) + 1)) ban(t);
   }
   if (X.ph === 'lobby' && pendingStart) {
-    pendingStart = false; X.sc = {}; on.forEach(p => X.sc[p] = 0); X.order = on.slice().sort(() => Math.random() - .5);
+    pendingStart = false;
+    if (on.length < 2) return;
+    X.sc = {}; on.forEach(p => X.sc[p] = 0); X.order = on.slice().sort(() => Math.random() - .5);
     X.drawn = []; X.round = 1; await nextTurn(X, now); ch = true;
   }
   if (X.ph !== 'lobby') {
@@ -333,7 +337,14 @@ function seg(st, from) {
   if (st.f) { fill(st.p[0], st.p[1], st.c); checkpoint(st); return; }
   const p = st.p; cx.strokeStyle = cx.fillStyle = st.c; cx.lineWidth = st.w; cx.lineCap = 'round'; cx.lineJoin = 'round';
   if (p.length < 4) { cx.beginPath(); cx.arc(p[0], p[1], st.w / 2, 0, 7); cx.fill(); return; }
-  const s = Math.max(0, from - 2); cx.beginPath(); cx.moveTo(p[s], p[s + 1]); for (let i = s + 2; i < p.length; i += 2) cx.lineTo(p[i], p[i + 1]); cx.stroke();
+  // Smooth curve through the midpoints between recorded points; 'from' redraws only the new tail.
+  const n = p.length >> 1, a = Math.max(1, (from >> 1) - 1);
+  cx.beginPath();
+  if (a === 1) cx.moveTo(p[0], p[1]); else cx.moveTo((p[2 * a - 2] + p[2 * a]) / 2, (p[2 * a - 1] + p[2 * a + 1]) / 2);
+  for (let i = a; i < n - 1; i++) cx.quadraticCurveTo(p[2 * i], p[2 * i + 1], (p[2 * i] + p[2 * i + 2]) / 2, (p[2 * i + 1] + p[2 * i + 3]) / 2);
+  // The last half-segment is only drawn once the stroke is finished, so live drawing and replays match exactly.
+  if (st.done) cx.lineTo(p[2 * n - 2], p[2 * n - 1]);
+  cx.stroke();
 }
 function redraw() {
   if (!strokes.length) cps = [];
@@ -378,20 +389,24 @@ cv.addEventListener('pointerdown', e => {
   cur = { id: rid(), c: tool === 'erase' ? '#ffffff' : color, w: tool === 'erase' ? Math.max(size, 20) : size, p: [x, y] }; sent = 0; strokes.push(cur); seg(cur, 0);
 });
 cv.addEventListener('pointermove', e => { if (!cur) return; const [x, y] = pos(e), p = cur.p; if (Math.abs(p[p.length - 2] - x) + Math.abs(p[p.length - 1] - y) < 2) return; const f = p.length; p.push(x, y); seg(cur, f); });
-const up = () => { if (cur) { flush(); cur = null; } };
+const up = () => { if (cur) { flush(true); cur.done = true; seg(cur, cur.p.length); cur = null; } };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-function flush() { if (!cur || cur.p.length === sent || !canDraw()) return; out({ s: cur.id, c: cur.c, w: cur.w, p: cur.p.slice(Math.max(0, sent - 2)) }); sent = cur.p.length; }
+function flush(end) {
+  if (!cur || !canDraw() || (cur.p.length === sent && !end)) return;
+  out({ s: cur.id, c: cur.c, w: cur.w, p: cur.p.length === sent ? [] : cur.p.slice(Math.max(0, sent - 2)), ...(end ? { e: 1 } : {}) }); sent = cur.p.length;
+}
 setInterval(flush, 70);
 function applyChunk(d) {
   if (!d || !S || d.by !== S.dr) return;
   if (d.x) { strokes = []; redraw(); return; }
   if (d.u) { strokes = strokes.filter(s => s.id !== d.u); redraw(); return; }
   const p = arr(d.p).slice(0, 4000).map(v => +v || 0), c = okCol(d.c);
-  if (!p.length) return;
+  if (!p.length) { const st = strokes.find(s => s.id === d.s); if (st && d.e && !st.done) { st.done = true; seg(st, st.p.length); } return; }
   if (d.f) { const st = { id: d.s, f: 1, c, p }; strokes.push(st); seg(st, 0); return; }
   let st = strokes.find(s => s.id === d.s);
   if (!st) { st = { id: d.s, c, w: Math.min(60, Math.max(1, +d.w || 4)), p }; strokes.push(st); seg(st, 0); }
   else { const f = st.p.length, idx = strokes.indexOf(st); cps = cps.filter(c => c.n <= idx); st.p.push(...p.slice(2)); seg(st, f); }
+  if (d.e && !st.done) { st.done = true; seg(st, st.p.length); }
 }
 $('#pal').innerHTML = COLORS.map(c => `<button data-c="${c}" style="background:${c}" aria-label="Colour ${c}" aria-pressed="${c === color}"></button>`).join('');
 $('#sizes').innerHTML = SIZES.map(s => `<button data-s="${s}" aria-label="Brush size ${s}" aria-pressed="${s === size}"><span class="dot" style="width:${Math.min(22, s / 1.5 + 4)}px;height:${Math.min(22, s / 1.5 + 4)}px"></span></button>`).join('');
@@ -488,13 +503,13 @@ function wordHtml() {
 function plist() {
   const on = onlineIds(), id = me(), host = S.host === id;
   const ids = S.ph === 'lobby' ? on : [...new Set([...S.order, ...on])].filter(p => P[p] && !S.ban[p]);
-  const rows = ids.map(p => ({ p, s: S.sc[p] || 0 })).sort((a, b) => b.s - a.s);
+  const rows = ids.map(p => ({ p, s: S.sc[p] || 0 })).sort((a, b) => b.s - a.s), allSc = rows.map(r => r.s);
   const need = Math.max(2, Math.floor((on.length - 1) / 2) + 1);
   $('#plist').innerHTML = rows.map((r, i) => {
     const away = !on.includes(r.p), got = S.ph === 'draw' && S.g[r.p], votes = Object.keys(KICK[r.p] || {}).length, mine = KICK[r.p] && KICK[r.p][id];
     const kb = r.p === id ? '' : host ? `<button class="kick" data-kick="${r.p}" aria-label="Remove ${esc(nameOf(r.p))}">Kick</button>`
       : `<button class="kick" data-vote="${r.p}" aria-pressed="${!!mine}" aria-label="Vote to remove ${esc(nameOf(r.p))}">Vote kick${votes ? ' ' + votes + '/' + need : ''}</button>`;
-    return `<li class="${got ? 'got' : ''} ${away ? 'away' : ''} ${r.p === id ? 'me' : ''}"><span class="rk">#${i + 1}</span>${avOf(r.p)}<span><span class="nm">${esc(nameOf(r.p))}</span><span class="sub">${r.p === id ? 'you · ' : ''}${S.ph === 'lobby' ? (S.host === r.p ? 'host' : 'ready') : r.s + ' pts'}</span> <span class="sub" data-aw="${r.p}"></span>${kb}</span>${S.dr === r.p && S.ph !== 'lobby' ? PEN : ''}</li>`;
+    return `<li class="${got ? 'got' : ''} ${away ? 'away' : ''} ${r.p === id ? 'me' : ''}"><span class="rk rk${S.ph === 'lobby' ? 0 : rankOf(r.s, allSc)}">${S.ph === 'lobby' ? '' : '#' + rankOf(r.s, allSc)}</span>${avOf(r.p)}<span><span class="nm">${esc(nameOf(r.p))}</span><span class="sub">${r.p === id ? 'you · ' : ''}${S.ph === 'lobby' ? (S.host === r.p ? 'host' : 'ready') : r.s + ' pts'}</span> <span class="sub" data-aw="${r.p}"></span>${kb}</span>${S.dr === r.p && S.ph !== 'lobby' ? PEN : ''}</li>`;
   }).join('');
 }
 $('#plist').addEventListener('click', e => {
@@ -550,8 +565,12 @@ function overlay() {
       const rs = Object.entries(S.gp).sort((a, b) => b[1] - a[1]);
       h = `<div class="card pop"><h2>${S.word ? 'The word was <span class="code">' + esc(S.word) + '</span>' : 'Turn skipped'}</h2>${rs.length ? '<ul class="res' + (rs.length > 4 ? ' many' : '') + '">' + rs.map(([p, v]) => `<li><span>${esc(nameOf(p))}</span><span class="plus">+${v}</span></li>`).join('') + '</ul>' : '<p class="muted">Nobody guessed it this time.</p>'}${S.word ? rateRow() : ''}</div>`;
     } else if (S.ph === 'over') {
-      const t = Object.entries(S.sc).filter(([p]) => P[p]).sort((a, b) => b[1] - a[1]).slice(0, 3), ord = [t[1], t[0], t[2]], hs = [70, 110, 50];
-      h = `<div class="card pop"><h2>${t[0] ? esc(nameOf(t[0][0])) + ' wins!' : 'Game over'}</h2><div class="podium">${ord.map((x, i) => x ? `<div>${avOf(x[0])}<span>${esc(nameOf(x[0]))}</span><span class="muted">${x[1]} pts</span><span class="bar" style="height:${hs[i]}px">${[2, 1, 3][i]}</span></div>` : '<div></div>').join('')}</div>${lastCard ? '<button class="big" id="shareCard" style="margin-top:12px">Share results</button>' : '<p class="muted">Making your results card…</p>'}<p class="muted small">Back to the lobby in a few seconds.</p></div>`;
+      const all = Object.entries(S.sc).filter(([p]) => P[p]).sort((a, b) => b[1] - a[1]), vals = all.map(x => x[1]);
+      const ranked = all.map(([p, v]) => ({ p, v, r: rankOf(v, vals) })).filter(x => x.r <= 3).slice(0, 5);
+      const winners = ranked.filter(x => x.r === 1), H = { 1: 110, 2: 74, 3: 52 };
+      const title = !winners.length ? 'Game over' : winners.length === 1 ? esc(nameOf(winners[0].p)) + ' wins!' : "It's a tie! " + winners.map(x => esc(nameOf(x.p))).join(' & ') + ' win!';
+      const order = ranked.length >= 2 ? [...ranked.slice(1, 2), ranked[0], ...ranked.slice(2)] : ranked;
+      h = `<div class="card pop"><h2>${title}</h2><div class="podium" style="grid-template-columns:repeat(${Math.max(3, order.length)},minmax(0,1fr))">${order.map(x => `<div>${avOf(x.p)}<span>${esc(nameOf(x.p))}</span><span class="muted">${x.v} pts</span><span class="bar" style="height:${H[x.r]}px">${x.r}</span></div>`).join('')}</div>${lastCard ? '<button class="big" id="shareCard" style="margin-top:12px">Share results</button>' : '<p class="muted">Making your results card…</p>'}<p class="muted small">Back to the lobby in a few seconds.</p></div>`;
     }
     ov.innerHTML = h; ov.className = 'show';
   }
@@ -568,6 +587,7 @@ function overlay() {
     const ids = onlineIds().sort(byT), lp = $('#lobpl');
     if (lp) lp.innerHTML = ids.map(p => `<div class="lp">${avOf(p)}<span>${esc(nameOf(p))}${p === me() ? ' (you)' : ''}</span>${S.host === p ? '<small>host</small>' : ''}</div>`).join('');
     const ln = $('#lobn'); if (ln) ln.textContent = ids.length === 1 ? 'Just you so far' : ids.length + ' players';
+    const go = $('#go'); if (go && !pendingStart) { const ready = onlineIds().length >= 2; go.disabled = !ready; go.textContent = ready ? 'Start game' : 'Waiting for 1 more player…'; }
     const wt = $('#wt'); if (wt) wt.textContent = 'Waiting for ' + nameOf(S.host) + ' to start the game…';
   }
 }
@@ -577,7 +597,7 @@ $('#ov').addEventListener('click', e => {
   if (b.id === 'nsh') navigator.share({ title: 'Scribe-It', text: 'Come play Scribe-It with me!', url: shareLink() }).catch(() => {});
   if (b.id === 'qrb') { const q = $('#qrbox'); q.hidden = !q.hidden; return; }
   if (b.id === 'shareCard') { shareCard(); return; }
-  if (b.id === 'go' && S.host === me()) { pendingStart = true; b.disabled = true; b.textContent = 'Starting…'; }
+  if (b.id === 'go' && S.host === me() && onlineIds().length >= 2) { pendingStart = true; b.disabled = true; b.textContent = 'Starting…'; }
   if (b.dataset.pm && S.host === me()) { pendingSet = { ...(pendingSet || {}), pmode: b.dataset.pm === 'custom' ? 'custom' : 'all', ...(b.dataset.pm === 'custom' && S.set.pmode !== 'custom' ? { packs: DEFAULT_PACKS.slice() } : {}) }; return; }
   if (b.id === 'pkAll' && S.host === me()) { pendingSet = { ...(pendingSet || {}), packs: PACK_ORDER.slice() }; return; }
   if (b.dataset.pk && S.host === me()) {
@@ -678,13 +698,13 @@ async function buildCard(plain) {
     g.fillStyle = 'rgba(255,255,255,.08)'; for (let i = 0; i < 40; i++) { g.beginPath(); g.arc((i * 137) % W2, (i * 251) % H2, 18 + (i % 4) * 8, 0, 7); g.fill(); }
     g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = '700 110px Fredoka, Nunito, sans-serif'; g.fillText('Scribe-It', W2 / 2, 150);
     g.fillStyle = '#ffd23f'; g.font = '700 46px Fredoka, Nunito, sans-serif'; g.fillText('Game results', W2 / 2, 220);
-    const top = Object.entries(S.sc).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const top = Object.entries(S.sc).sort((a, b) => b[1] - a[1]).slice(0, 3), topVals = Object.values(S.sc);
     const best = shots.filter(x => x.img).sort((a, b) => b.score - a.score)[0];
     const podY = best ? 300 : 360;
     for (const [i, [p, v]] of top.entries()) {
       const y = podY + i * 120; g.fillStyle = '#fff'; rr(g, 110, y, 860, 100, 26); g.fill();
-      g.fillStyle = ['#ffd23f', '#d5dbe8', '#e9b183'][i]; g.beginPath(); g.arc(180, y + 50, 36, 0, 7); g.fill();
-      g.fillStyle = '#1b1f3b'; g.font = '700 44px Fredoka, Nunito, sans-serif'; g.fillText(String(i + 1), 180, y + 66);
+      const rk = rankOf(v, topVals); g.fillStyle = ['#ffd23f', '#d5dbe8', '#e9b183'][rk - 1] || '#e9b183'; g.beginPath(); g.arc(180, y + 50, 36, 0, 7); g.fill();
+      g.fillStyle = '#1b1f3b'; g.font = '700 44px Fredoka, Nunito, sans-serif'; g.fillText(String(rk), 180, y + 66);
       if (plain) { g.fillStyle = colOf(p); g.beginPath(); g.arc(270, y + 50, 30, 0, 7); g.fill(); }
       else try { const ai = new Image(); await new Promise(r => { ai.onload = r; ai.onerror = r; ai.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(avOf(p).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="88" ')); }); g.drawImage(ai, 232, y + 8, 76, 84); } catch (e) {}
       g.textAlign = 'left'; g.fillStyle = '#1b1f3b'; g.font = '700 48px Nunito, sans-serif'; g.fillText(nameOf(p), 320, y + 66);
