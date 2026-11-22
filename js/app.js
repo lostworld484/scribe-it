@@ -221,7 +221,7 @@ function sys(type, p, extra) { return net.push(base + '/chat', { u: me(), sys: t
 function pool(set) {
   const cu = String(set.custom || '').split(',').map(s => s.trim()).filter(s => s && s.length <= 30);
   if (set.only && cu.length >= 3) return cu;
-  const keys = set.pmode === 'custom' ? set.packs : Object.keys(PACKS);
+  const keys = set.pmode === 'custom' ? set.packs : DEFAULT_PACKS;
   let p = []; for (const k of keys) if (PACKS[k]) p = p.concat(PACKS[k][1].split(','));
   p = p.concat(cu, cu, cu); return p.length >= 3 ? p : PACKS.classic[1].split(',');
 }
@@ -519,11 +519,11 @@ function overlay() {
     const f = document.activeElement, put = (i, v) => { const el = $(i); if (el && f !== el) el.value = v; };
     put('#sR', S.set.rounds); put('#sT', S.set.time); put('#sH', S.set.hints); put('#sM', S.set.max); put('#sD', S.set.diff || 'mixed'); put('#sW', S.set.custom || '');
     const o = $('#sO'); if (o) o.checked = !!S.set.only;
-    const custom = S.set.pmode === 'custom', on = custom ? S.set.packs.filter(k => PACKS[k]) : PACK_ORDER;
+    const custom = S.set.pmode === 'custom', on = custom ? S.set.packs.filter(k => PACKS[k]) : DEFAULT_PACKS;
     document.querySelectorAll('[data-pk]').forEach(b => b.setAttribute('aria-pressed', on.includes(b.dataset.pk)));
     document.querySelectorAll('[data-pm]').forEach(b => b.setAttribute('aria-pressed', (b.dataset.pm === 'custom') === custom));
     const pp = $('#pkpick'); if (pp) pp.hidden = !custom;
-    const pc = $('#pkcount'); if (pc) pc.textContent = custom ? `${on.length} of ${PACK_ORDER.length} on · ${on.reduce((t, k) => t + packSize(k), 0).toLocaleString()} words` : `${PACK_ORDER.reduce((t, k) => t + packSize(k), 0).toLocaleString()} words`;
+    const pc = $('#pkcount'); if (pc) pc.textContent = custom ? `${on.length} of ${PACK_ORDER.length} on · ${on.reduce((t, k) => t + packSize(k), 0).toLocaleString()} words` : `${DEFAULT_PACKS.reduce((t, k) => t + packSize(k), 0).toLocaleString()} words · Hindi is under Choose packs`;
     const ids = onlineIds().sort(byT), lp = $('#lobpl');
     if (lp) lp.innerHTML = ids.map(p => `<div class="lp">${avOf(p)}<span>${esc(nameOf(p))}${p === me() ? ' (you)' : ''}</span>${S.host === p ? '<small>host</small>' : ''}</div>`).join('');
     const ln = $('#lobn'); if (ln) ln.textContent = ids.length === 1 ? 'Just you so far' : ids.length + ' players';
@@ -537,7 +537,7 @@ $('#ov').addEventListener('click', e => {
   if (b.id === 'qrb') { const q = $('#qrbox'); q.hidden = !q.hidden; return; }
   if (b.id === 'shareCard') { shareCard(); return; }
   if (b.id === 'go' && S.host === me()) { pendingStart = true; b.disabled = true; b.textContent = 'Starting…'; }
-  if (b.dataset.pm && S.host === me()) { pendingSet = { ...(pendingSet || {}), pmode: b.dataset.pm === 'custom' ? 'custom' : 'all', ...(b.dataset.pm === 'custom' && S.set.pmode !== 'custom' ? { packs: PACK_ORDER.slice() } : {}) }; return; }
+  if (b.dataset.pm && S.host === me()) { pendingSet = { ...(pendingSet || {}), pmode: b.dataset.pm === 'custom' ? 'custom' : 'all', ...(b.dataset.pm === 'custom' && S.set.pmode !== 'custom' ? { packs: DEFAULT_PACKS.slice() } : {}) }; return; }
   if (b.id === 'pkAll' && S.host === me()) { pendingSet = { ...(pendingSet || {}), packs: PACK_ORDER.slice() }; return; }
   if (b.dataset.pk && S.host === me()) {
     const k = b.dataset.pk, p = ((pendingSet && pendingSet.packs) || S.set.packs).filter(x => PACKS[x]);
