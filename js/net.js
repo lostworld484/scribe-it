@@ -40,6 +40,7 @@ async function firebase() {
     onValue: (p, cb, err) => D.onValue(r(p), s => cb(s.val()), e => err && err(e)),
     onChild: (p, cb, limit) => D.onChildAdded(limit ? D.query(r(p), D.limitToLast(limit)) : r(p), s => cb(s.key, s.val()), () => {}),
     tx: (p, fn) => D.runTransaction(r(p), fn),
+    onConn: cb => D.onValue(r('.info/connected'), x => cb(x.val() === true)),
     presence(p, online, offline) {
       const un = D.onValue(r('.info/connected'), s => {
         if (s.val() === true) D.onDisconnect(r(p)).update(offline()).then(() => D.update(r(p), online())).catch(() => {});
@@ -85,6 +86,7 @@ function demo() {
     remove: p => write(d => setAt(d, p, null)),
     push: (p, v) => { const k = key(); write(d => setAt(d, p + '/' + k, v)); return { key: k }; },
     newKey: () => key(),
+    onConn: cb => { setTimeout(() => cb(true), 0); return () => {}; },
     onValue: (p, cb) => { const l = { p, cb, last: undefined }; vals.add(l); soon(); return () => vals.delete(l); },
     onChild: (p, cb, limit) => {
       const o = getAt(load(), p) || {}, ks = Object.keys(o).sort();

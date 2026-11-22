@@ -1,5 +1,6 @@
 import { PACKS, DEFAULT_PACKS } from './words.js';
 import { connect } from './net.js';
+import { qrMatrix } from './qr.js';
 
 const $ = s => document.querySelector(s);
 const W = 800, H = 600, GRACE = 60000;
@@ -58,7 +59,20 @@ const SFX = {
   win: () => [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(f, .22, i * .12, 'triangle')),
   close: () => tone(440, .12, 0, 'sawtooth', .05)
 };
-const sfx = n => { try { SFX[n] && SFX[n](); } catch (e) {} };
+const VIB = { ok: [60], turn: [90, 60, 90, 60, 90], close: [25], win: [120, 60, 120, 60, 220], end: [40] };
+const sfx = n => {
+  try { SFX[n] && SFX[n](); } catch (e) {}
+  try { if (!muted && VIB[n] && navigator.vibrate) navigator.vibrate(VIB[n]); } catch (e) {}
+};
+let flashT = null;
+function startFlash(msg) { stopFlash(); let on = false; flashT = setInterval(() => { on = !on; document.title = on ? msg : 'Scribe-It'; }, 900); }
+function stopFlash() { if (flashT) clearInterval(flashT); flashT = null; document.title = 'Scribe-It'; }
+let wake = null;
+async function keepAwake() {
+  try { if ('wakeLock' in navigator && base && document.visibilityState === 'visible' && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) { wake = null; }
+}
+function releaseAwake() { try { if (wake) wake.release(); } catch (e) {} wake = null; }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { keepAwake(); stopFlash(); } });
 function drawMute() { $('#mute').innerHTML = muted ? 'Sound off' : 'Sound on'; $('#mute').setAttribute('aria-pressed', !muted); }
 $('#mute').addEventListener('click', () => { muted = !muted; lset('dd-mute', muted ? '1' : '0'); drawMute(); initAudio(); });
 drawMute();
@@ -75,6 +89,16 @@ function drawSw() { $('#sws').innerHTML = AV.map(c => `<button class="sw" data-c
 drawSw();
 $('#sws').addEventListener('click', e => { const b = e.target.closest('.sw'); if (b) { myCol = b.dataset.c; lset('dd-col', myCol); drawSw(); } });
 $('#join').addEventListener('click', join);
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('#install').hidden = false; });
+window.addEventListener('appinstalled', () => { $('#install').hidden = true; installEvt = null; });
+$('#install').addEventListener('click', async () => { if (!installEvt) return; installEvt.prompt(); try { await installEvt.userChoice; } catch (e) {} installEvt = null; $('#install').hidden = true; });
+{
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !standalone) $('#ioshint').hidden = false;
+}
+window.addEventListener('offline', () => { if (base) $('#conn').hidden = false; });
+window.addEventListener('online', () => { $('#conn').hidden = true; });
 for (const id of ['#code', '#nick']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
 
 (async () => {
@@ -82,6 +106,8 @@ for (const id of ['#code', '#nick']) $(id).addEventListener('keydown', e => { if
   catch (e) { notice('Could not connect to the game server: ' + (e && e.message || e) + '. Check the Firebase setup in the README.'); $('#join').textContent = 'Offline'; return; }
   $('#join').disabled = false; $('#join').textContent = 'Play!';
   if (net.demo) $('#demo').hidden = false;
+  let connT = null;
+  net.onConn(ok => { clearTimeout(connT); if (ok) $('#conn').hidden = true; else connT = setTimeout(() => { if (base) $('#conn').hidden = false; }, 1500); });
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/sw.js').catch(() => {});
 })();
 
@@ -107,7 +133,8 @@ async function join() {
     unsubs.push(net.onValue(bp + '/kick', v => { KICK = v || {}; render(); }));
     unsubs.push(net.onChild(bp + '/chat', (k, m) => onChat(m), 60));
     lset('dd-last', JSON.stringify({ code: c, at: Date.now() }));
-    try { history.replaceState(null, '', net.demo ? '?r=' + c : '/r/' + c); } catch (e) {}
+    try { const u = net.demo ? '?r=' + c : '/r/' + c; history.replaceState(null, '', u); history.pushState({ sg: 1 }, '', u); } catch (e) {}
+    keepAwake(); shots = []; lastCard = null;
     $('#home').style.display = 'none'; $('#game').style.display = 'grid';
     addMsg(net.demo ? 'Demo mode: open more tabs of this page to add players.' : 'You joined room ' + c + '. Invite friends with the link.', 'info');
     onState();
@@ -118,11 +145,15 @@ function leave(msg) {
   unsubs.forEach(u => { try { u(); } catch (e) {} }); tidSubs.forEach(u => u()); if (secUn) secUn();
   unsubs = []; tidSubs = []; secUn = null; secKey = '';
   if (base && net) net.update(base + '/players/' + net.uid, { online: false, seen: net.ts() }).catch(() => {});
-  base = ''; code = ''; S = null; lset('dd-last', 'null');
+  base = ''; code = ''; S = null; lset('dd-last', 'null'); releaseAwake(); stopFlash(); document.body.classList.remove('drawing', 'kb'); $('#conn').hidden = true;
   try { history.replaceState(null, '', '/'); } catch (e) {}
   $('#game').style.display = 'none'; $('#home').style.display = 'grid'; notice(msg || '');
 }
 $('#leave').addEventListener('click', () => leave());
+window.addEventListener('popstate', () => { if (base) { try { history.pushState({ sg: 1 }, '', location.href); } catch (e) {} $('#dlg').hidden = false; } });
+window.addEventListener('beforeunload', e => { if (base && S && S.ph !== 'lobby') { e.preventDefault(); e.returnValue = ''; } });
+$('#dlgStay').addEventListener('click', () => { $('#dlg').hidden = true; });
+$('#dlgLeave').addEventListener('click', () => { $('#dlg').hidden = true; leave(); });
 
 /* ---------- listeners ---------- */
 const me = () => net.uid;
@@ -137,9 +168,11 @@ function onState() {
   if (S.ban[me()]) return leave('You were removed from the room.');
   if (S.tid !== subTid) resubTid();
   resubSecret();
-  if (S.tid !== prevTid && S.ph === 'choose') { addMsg(S.dr === me() ? 'Your turn! Pick a word to draw.' : nameOf(S.dr) + ' is choosing a word', 'info'); if (S.dr === me()) sfx('turn'); }
+  if (S.tid !== prevTid && S.ph === 'choose') { addMsg(S.dr === me() ? 'Your turn! Pick a word to draw.' : nameOf(S.dr) + ' is choosing a word', 'info'); if (S.dr === me()) { sfx('turn'); if (document.hidden) startFlash('Your turn! Draw now'); } }
+  if (prevPh === 'lobby' && S.ph === 'choose') { shots = []; lastCard = null; }
+  if (prevPh === 'draw' && S.ph === 'reveal' && S.word) snapshot();
   if (prevPh === 'draw' && S.ph === 'reveal') sfx('end');
-  if (S.ph === 'over' && prevPh && prevPh !== 'over') sfx('win');
+  if (S.ph === 'over' && prevPh && prevPh !== 'over') { sfx('win'); buildCard(); }
   prevPh = S.ph; prevTid = S.tid;
   render();
 }
@@ -153,7 +186,7 @@ function resubTid() {
   tidSubs.forEach(u => u()); tidSubs = []; subTid = S.tid; strokes = []; cur = null; myKeys = new Set(); RATE = {}; pendingPick = null; redraw();
   const t = S.tid, p = base;
   tidSubs.push(net.onChild(`${p}/draw/${t}`, (k, v) => { if (!myKeys.has(k)) applyChunk(v); }));
-  tidSubs.push(net.onValue(`${p}/rate/${t}`, v => { RATE = v || {}; render(); }));
+  tidSubs.push(net.onValue(`${p}/rate/${t}`, v => { RATE = v || {}; const sh = shots.find(x => x.tid === t); if (sh) sh.score = rateScore(); render(); }));
   tidSubs.push(net.onChild(`${p}/guesses/${t}`, (k, v) => { if (S && S.host === me()) pendingG.push([k, v, t]); }));
   tidSubs.push(net.onValue(`${p}/pick/${t}`, v => { if (v != null) pendingPick = [+v, t]; }));
 }
@@ -253,7 +286,7 @@ async function nextTurn(X, now) {
   let c = X.order.find(p => on.includes(p) && !X.drawn.includes(p));
   if (!c) {
     X.round++; X.drawn = [];
-    if (X.round > X.set.rounds) { X.ph = 'over'; X.dr = null; X.endAt = now + 10000; return; }
+    if (X.round > X.set.rounds) { X.ph = 'over'; X.dr = null; X.endAt = now + 20000; return; }
     c = X.order.find(p => on.includes(p));
   }
   if (!c) { X.ph = 'lobby'; X.dr = null; return; }
@@ -312,12 +345,14 @@ $('#pal').innerHTML = COLORS.map(c => `<button data-c="${c}" style="background:$
 $('#sizes').innerHTML = SIZES.map(s => `<button data-s="${s}" aria-label="Brush size ${s}" aria-pressed="${s === size}"><span class="dot" style="width:${Math.min(22, s / 1.5 + 4)}px;height:${Math.min(22, s / 1.5 + 4)}px"></span></button>`).join('');
 $('#tools').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
-  if (b.dataset.c) { color = b.dataset.c; if (tool === 'erase') tool = 'brush'; }
+  if (b.id === 'colbtn') { $('#tools').classList.toggle('pal-open'); return; }
+  if (b.dataset.c) { color = b.dataset.c; if (tool === 'erase') tool = 'brush'; $('#tools').classList.remove('pal-open'); }
   if (b.dataset.s) size = +b.dataset.s;
   if (b.dataset.t) tool = b.dataset.t;
   if (b.id === 'undo' && canDraw()) { const s = strokes.pop(); if (s) { redraw(); out({ u: s.id }); } }
   if (b.id === 'clr' && canDraw()) { strokes = []; redraw(); out({ x: 1 }); }
   document.querySelectorAll('#pal button').forEach(x => x.setAttribute('aria-pressed', x.dataset.c === color && tool !== 'erase'));
+  $('#colbtn span').style.background = tool === 'erase' ? '#ffffff' : color;
   document.querySelectorAll('#sizes button').forEach(x => x.setAttribute('aria-pressed', +x.dataset.s === size));
   document.querySelectorAll('[data-t]').forEach(x => x.setAttribute('aria-pressed', x.dataset.t === tool));
 });
@@ -329,10 +364,12 @@ function addMsg(t, cls, pid) {
   p.append(document.createTextNode(t));
   const l = $('#log'), stick = l.scrollTop + l.clientHeight >= l.scrollHeight - 30;
   l.append(p); while (l.children.length > 150) l.firstChild.remove(); if (stick) l.scrollTop = l.scrollHeight;
+  updatePeek();
 }
 function onChat(m) {
   if (!m || !S || typeof m.u !== 'string') return;
   const fresh = (+m.at || 0) >= joinedAt - 3000;
+  if (m.r) { if (REACTS.includes(m.r) && (+m.at || 0) >= net.now() - 8000) floatReact(m.r, m.u); return; }
   if (m.sys) {
     if (m.sys === 'g') { addMsg(nameOf(m.p) + ' guessed the word!', 'good'); if (fresh) sfx(m.p === me() ? 'ok' : 'pop'); }
     else if (m.sys === 'l') addMsg(nameOf(m.p) + ' was away too long and left the game', 'bad');
@@ -410,7 +447,7 @@ function rateRow() {
 }
 function overlay() {
   const ov = $('#ov'), id = me(), host = S.host === id, isDr = S.dr === id;
-  const key = [S.ph, S.tid, isDr, host, S.ph === 'choose' ? arr(SEC.ch).join() : '', S.ph === 'reveal' ? JSON.stringify(RATE) + S.word : '', S.ph === 'over' ? JSON.stringify(S.sc) : ''].join('|');
+  const key = [S.ph, S.tid, isDr, host, !!lastCard, S.ph === 'choose' ? arr(SEC.ch).join() : '', S.ph === 'reveal' ? JSON.stringify(RATE) + S.word : '', S.ph === 'over' ? JSON.stringify(S.sc) : ''].join('|');
   if (S.ph === 'draw') { ov.className = ''; ovKey = key; return; }
   if (key !== ovKey) {
     ovKey = key; let h = '';
@@ -419,7 +456,9 @@ function overlay() {
       const pk = Object.entries(PACKS).map(([k, v]) => `<button class="chip" data-pk="${k}" aria-pressed="${S.set.packs.includes(k)}" ${dis}>${esc(v[0])}</button>`).join('');
       const link = shareLink(), wa = 'https://wa.me/?text=' + encodeURIComponent('Come play Scribe-It with me! ' + link);
       h = `<div class="card pop"><h2>Room <span class="code">${esc(code)}</span></h2>
-        <div class="share"><input id="lnk" readonly value="${esc(link)}" aria-label="Room link"><button class="ghost" id="cp">Copy link</button><a class="wa" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>${navigator.share ? '<button class="ghost" id="nsh">Share</button>' : ''}</div>
+        <div class="share"><input id="lnk" readonly value="${esc(link)}" aria-label="Room link"><button class="ghost" id="cp">Copy link</button><a class="wa" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>${navigator.share ? '<button class="ghost" id="nsh">Share</button>' : ''}<button class="ghost" id="qrb">QR code</button></div>
+        <div id="qrbox" hidden><div class="qr">${qrSvg(link)}</div><p class="muted small">Friends nearby can scan this with their phone camera to join.</p></div>
+        ${lastCard ? '<button class="ghost" id="shareCard" style="width:100%;margin-bottom:8px">Share last game\'s results</button>' : ''}
         <div class="set">
           <label>Rounds${sel('sR', [2, 3, 4, 5, 6, 8])}</label>
           <label>Draw time${sel('sT', [40, 60, 80, 100, 120, 150], n => n + ' seconds')}</label>
@@ -438,7 +477,7 @@ function overlay() {
       h = `<div class="card pop"><h2>${S.word ? 'The word was <span class="code">' + esc(S.word) + '</span>' : 'Turn skipped'}</h2>${rs.length ? '<ul class="res">' + rs.map(([p, v]) => `<li><span>${esc(nameOf(p))}</span><span class="plus">+${v}</span></li>`).join('') + '</ul>' : '<p class="muted">Nobody guessed it this time.</p>'}${S.word ? rateRow() : ''}</div>`;
     } else if (S.ph === 'over') {
       const t = Object.entries(S.sc).filter(([p]) => P[p]).sort((a, b) => b[1] - a[1]).slice(0, 3), ord = [t[1], t[0], t[2]], hs = [70, 110, 50];
-      h = `<div class="card pop"><h2>${t[0] ? esc(nameOf(t[0][0])) + ' wins!' : 'Game over'}</h2><div class="podium">${ord.map((x, i) => x ? `<div>${av(colOf(x[0]))}<span>${esc(nameOf(x[0]))}</span><span class="muted">${x[1]} pts</span><span class="bar" style="height:${hs[i]}px">${[2, 1, 3][i]}</span></div>` : '<div></div>').join('')}</div><p class="muted">Back to the lobby in a few seconds.</p></div>`;
+      h = `<div class="card pop"><h2>${t[0] ? esc(nameOf(t[0][0])) + ' wins!' : 'Game over'}</h2><div class="podium">${ord.map((x, i) => x ? `<div>${av(colOf(x[0]))}<span>${esc(nameOf(x[0]))}</span><span class="muted">${x[1]} pts</span><span class="bar" style="height:${hs[i]}px">${[2, 1, 3][i]}</span></div>` : '<div></div>').join('')}</div>${lastCard ? '<button class="big" id="shareCard" style="margin-top:12px">Share results</button>' : '<p class="muted">Making your results card…</p>'}<p class="muted small">Back to the lobby in a few seconds.</p></div>`;
     }
     ov.innerHTML = h; ov.className = 'show';
   }
@@ -454,6 +493,8 @@ $('#ov').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b || !S) return;
   if (b.id === 'cp') navigator.clipboard.writeText(shareLink()).then(() => { b.textContent = 'Copied!'; }, () => { $('#lnk').select(); });
   if (b.id === 'nsh') navigator.share({ title: 'Scribe-It', text: 'Come play Scribe-It with me!', url: shareLink() }).catch(() => {});
+  if (b.id === 'qrb') { const q = $('#qrbox'); q.hidden = !q.hidden; return; }
+  if (b.id === 'shareCard') { shareCard(); return; }
   if (b.id === 'go' && S.host === me()) { pendingStart = true; b.disabled = true; b.textContent = 'Starting…'; }
   if (b.dataset.pk && S.host === me()) { const k = b.dataset.pk, p = S.set.packs; pendingSet = { ...(pendingSet || {}), packs: p.includes(k) ? (p.length > 1 ? p.filter(x => x !== k) : p) : [...p, k] }; }
   if (b.dataset.i != null && S.ph === 'choose' && S.dr === me()) { net.set(`${base}/pick/${S.tid}`, +b.dataset.i); b.parentNode.querySelectorAll('button').forEach(x => x.disabled = true); }
@@ -474,11 +515,106 @@ function render() {
   const id = me(), d = canDraw();
   $('#word').innerHTML = wordHtml();
   $('#rnd').textContent = S.ph === 'lobby' || S.ph === 'over' ? onlineIds().length + ' in room' : 'Round ' + Math.min(S.round, S.set.rounds) + ' of ' + S.set.rounds;
-  $('#wrap').classList.toggle('tall', S.ph === 'lobby');
+  $('#wrap').classList.toggle('tall', S.ph === 'lobby' || S.ph === 'over');
   plist(); overlay(); clockTick();
   $('#tools').hidden = !d; cv.classList.toggle('on', d);
+  if (d && !document.body.classList.contains('drawing')) { $('#tools').classList.remove('pal-open'); try { $('#msg').blur(); window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {} }
+  document.body.classList.toggle('drawing', d);
+  $('#reacts').hidden = S.ph === 'lobby';
   const hb = $('#hintbar'); hb.hidden = d;
   if (S.ph === 'draw') hb.innerHTML = `<span>${S.g[id] ? 'Nice! Chat with the others who got it.' : esc(nameOf(S.dr)) + ' is drawing. Type your guesses in the chat.'}</span>${rateRow()}`;
   else hb.textContent = S.ph === 'lobby' ? 'Waiting in the lobby. Invite at least one friend to play.' : S.ph === 'choose' ? 'A new turn is starting…' : '';
-  $('#msg').placeholder = d || S.g[id] ? 'Chat with players who guessed…' : 'Type your guess here…';
+  if (!d && !hb.textContent.trim()) hb.hidden = true;
+  $('#msg').placeholder = S.ph === 'draw' && (d || S.g[id]) ? 'Chat with players who guessed…' : S.ph === 'draw' ? 'Type your guess here…' : 'Type a message…';
+}
+
+/* ---------- reactions ---------- */
+const REACTS = ['😂', '👏', '😮', '🔥', '❤️', '🤔'];
+$('#reacts').innerHTML = REACTS.map(e => `<button data-r="${e}" aria-label="React ${e}">${e}</button>`).join('');
+let lastReact = 0;
+$('#reacts').addEventListener('click', e => {
+  const b = e.target.closest('[data-r]'); if (!b || !base || Date.now() - lastReact < 700) return;
+  lastReact = Date.now(); net.push(base + '/chat', { u: me(), txt: '', r: b.dataset.r, at: net.ts() });
+});
+function floatReact(r, u) {
+  const box = $('#floats'); if (box.children.length > 14) return;
+  const el = document.createElement('div'); el.className = 'fl'; el.style.left = (8 + Math.random() * 78) + '%';
+  el.textContent = r; const sm = document.createElement('small'); sm.textContent = nameOf(u); el.append(sm);
+  box.append(el); setTimeout(() => el.remove(), 2600);
+}
+
+/* ---------- keyboard-safe chat bar (phones) ---------- */
+const small = () => matchMedia('(max-width:700px)').matches;
+function updatePeek() {
+  if (!document.body.classList.contains('kb')) return;
+  const pk = $('#peek'); pk.innerHTML = '';
+  [...$('#log').children].slice(-3).forEach(n => pk.append(n.cloneNode(true)));
+}
+function placeBar() {
+  const vv = window.visualViewport, f = $('#cf');
+  if (!vv || !small()) { f.style.bottom = ''; return; }
+  const off = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+  f.style.bottom = off > 1 ? off + 'px' : '';
+}
+if (window.visualViewport) { visualViewport.addEventListener('resize', placeBar); visualViewport.addEventListener('scroll', placeBar); }
+$('#msg').addEventListener('focus', () => { if (small()) { document.body.classList.add('kb'); updatePeek(); } setTimeout(placeBar, 300); });
+$('#msg').addEventListener('blur', () => { setTimeout(() => { if (document.activeElement !== $('#msg')) { document.body.classList.remove('kb'); placeBar(); } }, 150); });
+
+/* ---------- QR code ---------- */
+function qrSvg(text) {
+  try {
+    const m = qrMatrix(text), n = m.length, q = 4; let d = '';
+    m.forEach((row, y) => row.forEach((on, x) => { if (on) d += `M${x + q} ${y + q}h1v1h-1z`; }));
+    return `<svg viewBox="0 0 ${n + q * 2} ${n + q * 2}" shape-rendering="crispEdges" role="img" aria-label="QR code for the room link"><rect width="100%" height="100%" fill="#fff"/><path d="${d}" fill="#1b1f3b"/></svg>`;
+  } catch (e) { return '<p class="muted">QR code unavailable.</p>'; }
+}
+
+/* ---------- results card ---------- */
+let shots = [], lastCard = null;
+function rateScore() { const v = Object.values(RATE); return v.filter(x => x > 0).length - v.filter(x => x < 0).length; }
+function snapshot() {
+  try {
+    const c = document.createElement('canvas'); c.width = 480; c.height = 360;
+    c.getContext('2d').drawImage(cv, 0, 0, 480, 360);
+    shots.push({ tid: S.tid, img: c.toDataURL('image/jpeg', .8), word: S.word, dr: S.dr, drName: nameOf(S.dr), score: rateScore() });
+  } catch (e) {}
+}
+function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+async function buildCard() {
+  try {
+    const W2 = 1080, H2 = 1350, c = document.createElement('canvas'); c.width = W2; c.height = H2; const g = c.getContext('2d');
+    try { await document.fonts.load('700 64px Fredoka'); } catch (e) {}
+    g.fillStyle = '#2347c6'; g.fillRect(0, 0, W2, H2);
+    g.fillStyle = 'rgba(255,255,255,.08)'; for (let i = 0; i < 40; i++) { g.beginPath(); g.arc((i * 137) % W2, (i * 251) % H2, 18 + (i % 4) * 8, 0, 7); g.fill(); }
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = '700 110px Fredoka, Nunito, sans-serif'; g.fillText('Scribe-It', W2 / 2, 150);
+    g.fillStyle = '#ffd23f'; g.font = '700 46px Fredoka, Nunito, sans-serif'; g.fillText('Game results', W2 / 2, 220);
+    const top = Object.entries(S.sc).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const best = shots.filter(x => x.img).sort((a, b) => b.score - a.score)[0];
+    const podY = best ? 300 : 360;
+    top.forEach(([p, v], i) => {
+      const y = podY + i * 120; g.fillStyle = '#fff'; rr(g, 110, y, 860, 100, 26); g.fill();
+      g.fillStyle = ['#ffd23f', '#d5dbe8', '#e9b183'][i]; g.beginPath(); g.arc(180, y + 50, 36, 0, 7); g.fill();
+      g.fillStyle = '#1b1f3b'; g.font = '700 44px Fredoka, Nunito, sans-serif'; g.fillText(String(i + 1), 180, y + 66);
+      g.fillStyle = colOf(p); g.beginPath(); g.arc(270, y + 50, 30, 0, 7); g.fill();
+      g.textAlign = 'left'; g.fillStyle = '#1b1f3b'; g.font = '700 48px Nunito, sans-serif'; g.fillText(nameOf(p), 320, y + 66);
+      g.textAlign = 'right'; g.fillStyle = '#2347c6'; g.fillText(v + ' pts', 940, y + 66); g.textAlign = 'center';
+    });
+    if (best) {
+      const img = new Image(); await new Promise(r => { img.onload = r; img.onerror = r; img.src = best.img; });
+      const y = podY + top.length * 120 + 40, w = 720, h = 540, x = (W2 - w) / 2;
+      g.fillStyle = '#fff'; rr(g, x - 20, y - 20, w + 40, h + 130, 30); g.fill();
+      try { g.drawImage(img, x, y, w, h); } catch (e) {}
+      g.fillStyle = '#1b1f3b'; g.font = '700 38px Nunito, sans-serif';
+      g.fillText('Best drawing: "' + best.word + '" by ' + best.drName, W2 / 2, y + h + 70);
+    }
+    g.fillStyle = '#e4e9ff'; g.font = '700 36px Nunito, sans-serif'; g.fillText('Play with me at ' + location.host, W2 / 2, H2 - 50);
+    const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+    if (blob) { lastCard = blob; ovKey = ''; render(); }
+  } catch (e) { console.error(e); }
+}
+async function shareCard() {
+  if (!lastCard) return;
+  const file = new File([lastCard], 'scribe-it-results.png', { type: 'image/png' });
+  try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text: 'We just played Scribe-It! Join us: ' + location.origin }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(lastCard); a.download = 'scribe-it-results.png'; document.body.append(a); a.click(); a.remove();
 }
