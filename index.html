@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
 <title>Scribe-It</title>
+<meta name="author" content="LostWorld">
 <meta name="description" content="Draw, guess and laugh with friends. A free multiplayer drawing game.">
 <meta name="theme-color" content="#2347c6">
 <link rel="manifest" href="/manifest.webmanifest">
@@ -36,7 +37,9 @@ h1,h2{font-family:Fredoka,sans-serif;line-height:1.05;margin:0;text-wrap:balance
 #home{max-width:1100px;margin:auto;padding:clamp(24px,5vw,56px) max(4vw,14px);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:clamp(20px,4vw,48px);align-items:center}
 .logo{font-size:clamp(46px,8vw,84px);font-weight:700;color:#fff;text-shadow:0 5px 0 var(--deep)}
 .logo span{display:inline-block}.logo span:nth-child(odd){transform:rotate(-5deg)}.logo span:nth-child(even){transform:rotate(4deg)}
-.tag{color:#e4e9ff;font-size:18px;margin:14px 0 22px;max-width:30em}
+.byline{margin:4px 0 0;font-family:Fredoka,sans-serif;font-size:clamp(18px,2.4vw,24px);font-weight:600;color:#e4e9ff;transform:rotate(-2deg);transform-origin:left}
+.byline b{color:var(--sun);font-weight:700}
+.tag{color:#e4e9ff;font-size:18px;margin:10px 0 22px;max-width:30em}
 .card{background:var(--card);border-radius:20px;padding:20px;box-shadow:0 8px 0 rgba(0,0,0,.18)}
 .form{display:grid;gap:12px}.form label{font-weight:800;font-size:14px;display:grid;gap:6px}
 .swatches{display:flex;flex-wrap:wrap;gap:8px}
@@ -269,6 +272,7 @@ h1,h2{font-family:Fredoka,sans-serif;line-height:1.05;margin:0;text-wrap:balance
 <main id="home">
   <section>
     <h1 class="logo" aria-label="Scribe-It"><span>S</span><span>c</span><span>r</span><span>i</span><span>b</span><span>e</span><span>-</span><span>I</span><span>t</span></h1>
+    <p class="byline">by <b>LostWorld</b></p>
     <p class="tag">Draw a secret word while your friends race to guess it. Share the link, play together, live.</p>
     <div class="card form">
       <div id="demo" hidden>Demo mode: Firebase isn't set up yet, so other players are just other tabs in this browser.</div>
