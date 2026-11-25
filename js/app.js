@@ -35,7 +35,7 @@ let tool = 'brush', color = '#000000', size = 10, myCol = lget('dd-col') || AV[r
 let myAv = (() => { try { return cleanAv(JSON.parse(lget('dd-av') || 'null') || { e: rnd(PARTS.e), m: rnd(PARTS.m), h: 0 }); } catch (e) { return cleanAv({}); } })();
 let ovKey = '', prevPh = '', prevTid = -1, lastSecs = -1, wasOnline = {}, muted = lget('dd-mute') === '1';
 
-const defState = () => ({ host: null, ph: 'lobby', set: { rounds: 3, time: 80, hints: 2, max: 12, diff: 'mixed', pmode: 'all', packs: DEFAULT_PACKS, custom: '', only: false }, sc: {}, order: [], drawn: [], round: 0, dr: null, tid: 0, endAt: 0, g: {}, gp: {}, rev: [], hint: [], h: '', word: '', ban: {} });
+const defState = () => ({ host: null, since: 0, ph: 'lobby', set: { rounds: 3, time: 80, hints: 2, max: 12, diff: 'mixed', pmode: 'all', packs: DEFAULT_PACKS, custom: '', only: false }, sc: {}, order: [], drawn: [], round: 0, dr: null, tid: 0, endAt: 0, g: {}, gp: {}, rev: [], hint: [], h: '', word: '', ban: {} });
 function normState(v) {
   const d = defState(), s = { ...d, ...v, set: { ...d.set, ...((v && v.set) || {}) } };
   s.order = arr(s.order); s.drawn = arr(s.drawn); s.rev = arr(s.rev).map(Number); s.hint = arr(s.hint); s.set.packs = arr(s.set.packs);
@@ -132,7 +132,20 @@ async function join() {
   const c = ($('#code').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '') || rid().slice(0, 5)).slice(0, 12);
   try {
     const bp = 'rooms/' + c, me = net.uid;
-    const st = await net.get(bp + '/state'), pl = (await net.get(bp + '/players')) || {};
+    let st = await net.get(bp + '/state'), pl = (await net.get(bp + '/players')) || {};
+    // An old room nobody is in (and nobody left within the last 60 s) starts over as a fresh lobby.
+    const others = Object.keys(pl).filter(k => k !== me && pl[k]);
+    const lastSeen = Math.max(0, ...others.map(k => pl[k].online ? Infinity : (+pl[k].seen || 0)));
+    const abandoned = !!st && net.now() - lastSeen > GRACE;
+    if (abandoned) {
+      const fresh = { ...defState(), host: me, tid: (+st.tid || 0) + 1, since: net.now() };
+      await net.set(bp + '/state', fresh);
+      const old = +st.tid || 0;
+      for (const k of ['draw', 'secret', 'guesses', 'pick', 'rate']) net.remove(`${bp}/${k}/${old}`).catch(() => {});
+      net.remove(bp + '/kick').catch(() => {});
+      for (const k of others) net.remove(bp + '/players/' + k).catch(() => {});
+      st = fresh; pl = {};
+    }
     if (st && st.ban && st.ban[me]) throw new Error('You were removed from this room by the host.');
     const max = (st && st.set && st.set.max) || 12, on = Object.keys(pl).filter(k => k !== me && pl[k] && pl[k].online).length;
     if (st && on >= max) throw new Error('This room is full (' + max + ' players). Try another code.');
@@ -140,6 +153,7 @@ async function join() {
     code = c; base = bp; S = normState(st || { ...defState(), host: me }); P = pl;
     await net.update(bp + '/players/' + me, { nick, col: myCol, av: myAv, t: (pl[me] && pl[me].t) || net.now(), online: true, seen: net.ts() });
     joinedAt = net.now(); wasOnline = {}; ovKey = ''; prevPh = ''; prevTid = -1; subTid = -1; $('#log').innerHTML = '';
+    if (abandoned) addMsg('This room was empty, so it has been reset.', 'info');
     unsubs.push(net.presence(bp + '/players/' + me, () => ({ online: true, seen: net.ts() }), () => ({ online: false, seen: net.ts() })));
     unsubs.push(net.onValue(bp + '/state', v => { if (v) { S = normState(v); onState(); } }));
     unsubs.push(net.onValue(bp + '/players', v => { P = v || {}; onPlayers(); render(); }));
@@ -435,6 +449,7 @@ function addMsg(t, cls, pid) {
 }
 function onChat(m) {
   if (!m || !S || typeof m.u !== 'string') return;
+  if ((+m.at || 0) < (+S.since || 0)) return; // chat from before the room was reset
   const fresh = (+m.at || 0) >= joinedAt - 3000;
   if (m.r) { if (REACTS.includes(m.r) && (+m.at || 0) >= net.now() - 8000) floatReact(m.r, m.u); return; }
   if (m.sys) {
