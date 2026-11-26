@@ -33,6 +33,7 @@ let myKeys = new Set(), strokes = [], cur = null, sent = 0;
 let hostBusy = false, pendingG = [], pendingPick = null, pendingStart = false, pendingSet = null, pendingKick = [];
 let tool = 'brush', color = '#000000', size = 10, myCol = lget('dd-col') || AV[rnd(AV.length)];
 let myAv = (() => { try { return cleanAv(JSON.parse(lget('dd-av') || 'null') || { e: rnd(PARTS.e), m: rnd(PARTS.m), h: 0 }); } catch (e) { return cleanAv({}); } })();
+let prevGp = {}, prevGpTid = -1, prevGot = false;
 let ovKey = '', prevPh = '', prevTid = -1, lastSecs = -1, wasOnline = {}, muted = lget('dd-mute') === '1';
 
 const defState = () => ({ host: null, since: 0, ph: 'lobby', set: { rounds: 3, time: 80, hints: 2, max: 12, diff: 'mixed', pmode: 'all', packs: DEFAULT_PACKS, custom: '', only: false }, sc: {}, order: [], drawn: [], round: 0, dr: null, tid: 0, endAt: 0, g: {}, gp: {}, rev: [], hint: [], h: '', word: '', ban: {} });
@@ -178,7 +179,7 @@ function leave(msg) {
   $('#game').style.display = 'none'; $('#home').style.display = 'grid'; notice(msg || '');
 }
 $('#leave').addEventListener('click', () => leave());
-window.addEventListener('popstate', () => { if (base) { try { history.pushState({ sg: 1 }, '', location.href); } catch (e) {} $('#dlg').hidden = false; } });
+window.addEventListener('popstate', () => { if (!$('#gal').hidden) { $('#gal').hidden = true; try { history.pushState({ sg: 1 }, '', location.href); } catch (e) {} return; } if (base) { try { history.pushState({ sg: 1 }, '', location.href); } catch (e) {} $('#dlg').hidden = false; } });
 window.addEventListener('beforeunload', e => { if (base && S && S.ph !== 'lobby') { e.preventDefault(); e.returnValue = ''; } });
 $('#dlgStay').addEventListener('click', () => { $('#dlg').hidden = true; });
 $('#dlgLeave').addEventListener('click', () => { $('#dlg').hidden = true; leave(); });
@@ -202,8 +203,14 @@ function onState() {
   if (prevPh === 'draw' && S.ph === 'reveal' && S.word) snapshot();
   if (prevPh === 'draw' && S.ph === 'reveal') sfx('end');
   if (S.ph === 'over' && prevPh && prevPh !== 'over') { sfx('win'); buildCard(); }
+  const gains = [];
+  if (S.tid === prevGpTid) for (const p in S.gp) { const d = (S.gp[p] || 0) - (prevGp[p] || 0); if (d > 0) gains.push([p, d]); }
+  const iGotIt = S.ph === 'draw' && S.tid === prevGpTid && S.g[me()] && !prevGot;
+  prevGp = { ...S.gp }; prevGpTid = S.tid; prevGot = !!S.g[me()];
   prevPh = S.ph; prevTid = S.tid;
   render();
+  gains.forEach(([p, d]) => floatPoints(p, d));
+  if (iGotIt) celebrate();
 }
 function onPlayers() {
   const on = new Set(onlineIds());
@@ -527,7 +534,7 @@ function plist() {
     const away = !on.includes(r.p), got = S.ph === 'draw' && S.g[r.p], votes = Object.keys(KICK[r.p] || {}).length, mine = KICK[r.p] && KICK[r.p][id];
     const kb = r.p === id ? '' : host ? `<button class="kick" data-kick="${r.p}" aria-label="Remove ${esc(nameOf(r.p))}">Kick</button>`
       : `<button class="kick" data-vote="${r.p}" aria-pressed="${!!mine}" aria-label="Vote to remove ${esc(nameOf(r.p))}">Vote kick${votes ? ' ' + votes + '/' + need : ''}</button>`;
-    return `<li class="${got ? 'got' : ''} ${away ? 'away' : ''} ${r.p === id ? 'me' : ''}"><span class="rk rk${S.ph === 'lobby' ? 0 : rankOf(r.s, allSc)}">${S.ph === 'lobby' ? '' : '#' + rankOf(r.s, allSc)}</span>${avOf(r.p)}<span><span class="nm">${esc(nameOf(r.p))}</span><span class="sub">${r.p === id ? 'you · ' : ''}${S.ph === 'lobby' ? (S.host === r.p ? 'host' : 'ready') : r.s + ' pts'}</span> <span class="sub" data-aw="${r.p}"></span>${kb}</span>${S.dr === r.p && S.ph !== 'lobby' ? PEN : ''}</li>`;
+    return `<li data-pid="${r.p}" class="${got ? 'got' : ''} ${away ? 'away' : ''} ${r.p === id ? 'me' : ''}"><span class="rk rk${S.ph === 'lobby' ? 0 : rankOf(r.s, allSc)}">${S.ph === 'lobby' ? '' : '#' + rankOf(r.s, allSc)}</span>${avOf(r.p)}<span><span class="nm">${esc(nameOf(r.p))}</span><span class="sub">${r.p === id ? 'you · ' : ''}${S.ph === 'lobby' ? (S.host === r.p ? 'host' : 'ready') : r.s + ' pts'}</span> <span class="sub" data-aw="${r.p}"></span>${kb}</span>${S.dr === r.p && S.ph !== 'lobby' ? PEN : ''}</li>`;
   }).join('');
 }
 $('#plist').addEventListener('click', e => {
@@ -543,7 +550,7 @@ function rateRow() {
 }
 function overlay() {
   const ov = $('#ov'), id = me(), host = S.host === id, isDr = S.dr === id;
-  const key = [S.ph, S.tid, isDr, host, !!lastCard, S.ph === 'choose' ? arr(SEC.ch).join() : '', S.ph === 'reveal' ? S.word : '', S.ph === 'over' ? JSON.stringify(S.sc) : ''].join('|');
+  const key = [S.ph, S.tid, isDr, host, !!lastCard, shots.length, S.ph === 'choose' ? arr(SEC.ch).join() : '', S.ph === 'reveal' ? S.word : '', S.ph === 'over' ? JSON.stringify(S.sc) : ''].join('|');
   if (S.ph === 'draw') { ov.className = ''; ovKey = key; return; }
   if (key !== ovKey) {
     ovKey = key; let h = '';
@@ -554,7 +561,7 @@ function overlay() {
       h = `<div class="card pop lobby"><h2>Room <span class="code">${esc(code)}</span></h2>
         <div class="share"><input id="lnk" readonly value="${esc(link)}" aria-label="Room link"><button class="ghost" id="cp">Copy link</button><a class="wa" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>${navigator.share ? '<button class="ghost" id="nsh">Share</button>' : ''}<button class="ghost" id="qrb">QR code</button></div>
         <div id="qrbox" hidden><div class="qr">${qrSvg(link)}</div><p class="muted small">Friends nearby can scan this with their phone camera to join.</p></div>
-        ${lastCard ? '<button class="ghost" id="shareCard" style="width:100%;margin-top:8px">Share last game\'s results</button>' : ''}
+        ${lastCard || shots.length ? `<div class="lastgame">${shots.length ? `<button class="ghost" id="openGal">Last game's drawings (${shots.length})</button>` : ''}${lastCard ? '<button class="ghost" id="shareCard">Share last results</button>' : ''}</div>` : ''}
         <section class="sec"><div class="sech"><b>Players here</b><span class="muted small" id="lobn"></span></div><div class="lobpl" id="lobpl"></div></section>
         <section class="sec"><div class="sech"><b>Game settings</b></div>
         <div class="set">
@@ -588,7 +595,7 @@ function overlay() {
       const winners = ranked.filter(x => x.r === 1), H = { 1: 110, 2: 74, 3: 52 };
       const title = !winners.length ? 'Game over' : winners.length === 1 ? esc(nameOf(winners[0].p)) + ' wins!' : "It's a tie! " + winners.map(x => esc(nameOf(x.p))).join(' & ') + ' win!';
       const order = ranked.length >= 2 ? [...ranked.slice(1, 2), ranked[0], ...ranked.slice(2)] : ranked;
-      h = `<div class="card pop"><h2>${title}</h2><div class="podium" style="grid-template-columns:repeat(${Math.max(3, order.length)},minmax(0,1fr))">${order.map(x => `<div>${avOf(x.p)}<span>${esc(nameOf(x.p))}</span><span class="muted">${x.v} pts</span><span class="bar" style="height:${H[x.r]}px">${x.r}</span></div>`).join('')}</div>${lastCard ? '<button class="big" id="shareCard" style="margin-top:12px">Share results</button>' : '<p class="muted">Making your results card…</p>'}<p class="muted small">Back to the lobby in a few seconds.</p></div>`;
+      h = `<div class="card pop"><h2>${title}</h2><div class="podium" style="grid-template-columns:repeat(${Math.max(3, order.length)},minmax(0,1fr))">${order.map(x => `<div>${avOf(x.p)}<span>${esc(nameOf(x.p))}</span><span class="muted">${x.v} pts</span><span class="bar" style="height:${H[x.r]}px">${x.r}</span></div>`).join('')}</div>${lastCard ? '<button class="big" id="shareCard" style="margin-top:12px">Share results</button>' : '<p class="muted">Making your results card…</p>'}${shots.length ? `<button class="ghost" id="openGal" style="width:100%;margin-top:8px">See all ${shots.length} drawings</button>` : ''}<p class="muted small">Back to the lobby in a few seconds.</p></div>`;
     }
     ov.innerHTML = h; ov.className = 'show';
   }
@@ -615,6 +622,7 @@ $('#ov').addEventListener('click', e => {
   if (b.id === 'nsh') navigator.share({ title: 'Scribe-It', text: 'Come play Scribe-It with me!', url: shareLink() }).catch(() => {});
   if (b.id === 'qrb') { const q = $('#qrbox'); q.hidden = !q.hidden; return; }
   if (b.id === 'shareCard') { shareCard(); return; }
+  if (b.id === 'openGal') { openGallery(); return; }
   if (b.id === 'go' && S.host === me() && onlineIds().length >= 2) { pendingStart = true; b.disabled = true; b.textContent = 'Starting…'; }
   if (b.dataset.pm && S.host === me()) { pendingSet = { ...(pendingSet || {}), pmode: b.dataset.pm === 'custom' ? 'custom' : 'all', ...(b.dataset.pm === 'custom' && S.set.pmode !== 'custom' ? { packs: DEFAULT_PACKS.slice() } : {}) }; return; }
   if (b.id === 'pkAll' && S.host === me()) { pendingSet = { ...(pendingSet || {}), packs: PACK_ORDER.slice() }; return; }
@@ -702,9 +710,8 @@ let shots = [], lastCard = null;
 function rateScore() { const v = Object.values(RATE); return v.filter(x => x > 0).length - v.filter(x => x < 0).length; }
 function snapshot() {
   try {
-    const c = document.createElement('canvas'); c.width = 480; c.height = 360;
-    c.getContext('2d').drawImage(cv, 0, 0, 480, 360);
-    shots.push({ tid: S.tid, img: c.toDataURL('image/jpeg', .8), word: S.word, dr: S.dr, drName: nameOf(S.dr), score: rateScore() });
+    if (shots.some(x => x.tid === S.tid)) return;
+    shots.push({ tid: S.tid, img: cv.toDataURL('image/jpeg', .85), word: S.word, dr: S.dr, drName: nameOf(S.dr), score: rateScore() });
   } catch (e) {}
 }
 function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
@@ -770,3 +777,58 @@ function fitBoard() {
 }
 window.addEventListener('resize', fitBoard);
 $('#tools').addEventListener('click', () => setTimeout(fitBoard, 0));
+
+/* ---------- celebrations: confetti, flash and floating points ---------- */
+const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+function floatPoints(pid, pts) {
+  const li = document.querySelector(`#plist li[data-pid="${CSS.escape(pid)}"]`); if (!li) return;
+  const el = document.createElement('span'); el.className = 'ptsfloat'; el.textContent = '+' + pts;
+  li.append(el); setTimeout(() => el.remove(), 1600);
+}
+function celebrate() {
+  const w = $('#wrap'); w.classList.remove('flash'); void w.offsetWidth; w.classList.add('flash');
+  if (calm()) return;
+  const c = document.createElement('canvas'); c.className = 'confetti'; document.body.append(c);
+  const dpr = Math.min(2, devicePixelRatio || 1), W2 = c.width = innerWidth * dpr, H2 = c.height = innerHeight * dpr, g = c.getContext('2d');
+  const cols = ['#ffd23f', '#ff4f7b', '#2fbf7f', '#2fb3ff', '#7b3fe4', '#ff7a1a'];
+  const bits = Array.from({ length: 110 }, () => ({ x: W2 / 2 + (Math.random() - .5) * W2 * .3, y: H2 * .35, vx: (Math.random() - .5) * 16 * dpr, vy: (-Math.random() * 14 - 6) * dpr, r: (4 + Math.random() * 5) * dpr, a: Math.random() * 6, va: (Math.random() - .5) * .4, c: cols[rnd(cols.length)] }));
+  const t0 = performance.now();
+  (function step(t) {
+    const k = (t - t0) / 1600; g.clearRect(0, 0, W2, H2);
+    for (const b of bits) { b.vy += .45 * dpr; b.x += b.vx; b.y += b.vy; b.a += b.va; g.save(); g.globalAlpha = Math.max(0, 1 - k); g.translate(b.x, b.y); g.rotate(b.a); g.fillStyle = b.c; g.fillRect(-b.r, -b.r / 2, b.r * 2, b.r); g.restore(); }
+    if (k < 1) requestAnimationFrame(step); else c.remove();
+  })(t0);
+}
+
+/* ---------- gallery of this game's drawings ---------- */
+function openGallery() {
+  if (!shots.length) return;
+  const g = $('#gal');
+  $('#galtitle').textContent = `This game's drawings (${shots.length})`;
+  $('#galtrack').innerHTML = shots.map((x, i) => {
+    const likes = x.score > 0 ? `<span class="glikes">${x.score} like${x.score === 1 ? '' : 's'}</span>` : '';
+    return `<figure class="gcard"><img src="${x.img}" alt="Drawing of ${esc(x.word)} by ${esc(x.drName)}" loading="lazy"><figcaption><b>${esc(x.word)}</b><span>by ${esc(x.drName)}</span>${likes}</figcaption><button class="ghost" data-save="${i}">Save picture</button></figure>`;
+  }).join('');
+  g.hidden = false; $('#galtrack').scrollLeft = 0; galPos(); $('#galclose').focus();
+}
+$('#galclose').addEventListener('click', () => { $('#gal').hidden = true; });
+$('#gal').addEventListener('click', async e => {
+  if (e.target.id === 'gal') { $('#gal').hidden = true; return; }
+  const b = e.target.closest('[data-save]'); if (!b) return;
+  const x = shots[+b.dataset.save]; if (!x) return;
+  const blob = await (await fetch(x.img)).blob();
+  const name = 'scribe-it-' + String(x.word).replace(/[^\p{L}\p{N}]+/gu, '-').slice(0, 40) + '.jpg';
+  const file = new File([blob], name, { type: 'image/jpeg' });
+  try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text: `My Scribe-It drawing: "${x.word}"` }); return; } } catch (err) { if (err && err.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove();
+  b.textContent = 'Saved'; setTimeout(() => { b.textContent = 'Save picture'; }, 1500);
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#gal').hidden) $('#gal').hidden = true; });
+
+const galIdx = () => { const t = $('#galtrack'); return Math.round(t.scrollLeft / Math.max(1, t.clientWidth + 12)); };
+function galPos() { const n = shots.length, i = Math.min(n - 1, galIdx()); $('#galpos').textContent = `${i + 1} of ${n} · swipe`; $('#galprev').disabled = i <= 0; $('#galnext').disabled = i >= n - 1; }
+function galGo(d) { const t = $('#galtrack'); t.scrollTo({ left: (galIdx() + d) * (t.clientWidth + 12), behavior: calm() ? 'auto' : 'smooth' }); }
+$('#galtrack').addEventListener('scroll', () => requestAnimationFrame(galPos), { passive: true });
+$('#galprev').addEventListener('click', () => galGo(-1));
+$('#galnext').addEventListener('click', () => galGo(1));
+document.addEventListener('keydown', e => { if ($('#gal').hidden) return; if (e.key === 'ArrowLeft') galGo(-1); if (e.key === 'ArrowRight') galGo(1); });
